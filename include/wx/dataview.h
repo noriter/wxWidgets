@@ -94,7 +94,7 @@ WX_DEFINE_ARRAY(wxDataViewItem, wxDataViewItemArray);
 // wxDataViewModelNotifier
 // ---------------------------------------------------------
 
-class WXDLLIMPEXP_ADV wxDataViewModelNotifier
+class WXDLLIMPEXP_ADV wxDataViewModelNotifier : public wxTrackable
 {
 public:
     wxDataViewModelNotifier() { m_owner = NULL; }

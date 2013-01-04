@@ -52,7 +52,7 @@ enum
 //                 wxListCtrl, wxDataViewCtrl or wxGrid
 // ----------------------------------------------------------------------------
 
-class WXDLLIMPEXP_CORE wxHeaderColumn
+class WXDLLIMPEXP_CORE wxHeaderColumn : public wxTrackable
 {
 public:
     // ctors and dtor
