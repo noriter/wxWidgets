@@ -192,7 +192,7 @@ class wxRibbonGalleryItem;
 class wxRibbonPageTabInfo;
 class wxRibbonPageTabInfoArray;
 
-class WXDLLIMPEXP_RIBBON wxRibbonArtProvider
+class WXDLLIMPEXP_RIBBON wxRibbonArtProvider : public wxTrackable
 {
 public:
     wxRibbonArtProvider();
