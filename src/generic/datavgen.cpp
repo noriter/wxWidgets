@@ -3087,6 +3087,8 @@ void wxDataViewMainWindow::Expand( unsigned int row )
                 if(m_currentRow > row)
                     ChangeCurrentRow(m_currentRow + rowAdjustment);
 
+				GetOwner()->InvalidateColBestWidths();
+
                 m_count = -1;
                 UpdateDisplay();
                 // Send the expanded event
@@ -3161,6 +3163,8 @@ void wxDataViewMainWindow::Collapse(unsigned int row)
                 else if(m_currentRow > row)
                     ChangeCurrentRow(m_currentRow - rowAdjustment);
             }
+
+			GetOwner()->InvalidateColBestWidths();
 
             m_count = -1;
             UpdateDisplay();
@@ -4003,7 +4007,7 @@ void wxDataViewMainWindow::OnMouse( wxMouseEvent &event )
         wxDataViewTreeNode * node = GetTreeNodeByRow(current);
 
         int indent = node->GetIndentLevel();
-        itemOffset = GetOwner()->GetIndent()*indent;
+        itemOffset = xpos + GetOwner()->GetIndent()*indent;
 
         if ( node->HasChildren() )
         {
@@ -4660,20 +4664,18 @@ unsigned int wxDataViewCtrl::GetBestColumnWidth(int idx) const
                            wxDataViewRenderer *renderer,
                            const wxDataViewModel *model,
                            unsigned column,
-                           int expanderSize)
+                           int expanderSize,
+						   bool isExpanderCol)
             : m_width(0),
               m_dvc(dvc),
               m_clientArea(clientArea),
               m_renderer(renderer),
               m_model(model),
               m_column(column),
-              m_expanderSize(expanderSize)
+              m_expanderSize(expanderSize),
+			  m_isExpanderCol(isExpanderCol)
 
         {
-            m_isExpanderCol =
-                !clientArea->IsList() &&
-                (column == 0 ||
-                 GetExpanderColumnOrFirstOne(const_cast<wxDataViewCtrl*>(dvc)) == dvc->GetColumnAt(column));
         }
 
         void UpdateWithWidth(int width)
@@ -4714,9 +4716,13 @@ unsigned int wxDataViewCtrl::GetBestColumnWidth(int idx) const
         int m_expanderSize;
     };
 
+	bool isExpanderCol = !m_clientArea->IsList() &&
+		column == GetExpanderColumnOrFirstOne(const_cast<wxDataViewCtrl*>(this));
+
     MaxWidthCalculator calculator(this, m_clientArea, renderer,
                                   GetModel(), column->GetModelColumn(),
-                                  m_clientArea->GetRowHeight());
+                                  m_clientArea->GetRowHeight(), 
+								  isExpanderCol);
 
     calculator.UpdateWithWidth(column->GetMinWidth());
 
@@ -5096,7 +5102,6 @@ void wxDataViewCtrl::Expand( const wxDataViewItem & item )
     if (row != -1)
     {
         m_clientArea->Expand(row);
-        InvalidateColBestWidths();
     }
 }
 
@@ -5106,7 +5111,6 @@ void wxDataViewCtrl::Collapse( const wxDataViewItem & item )
     if (row != -1)
     {
         m_clientArea->Collapse(row);
-        InvalidateColBestWidths();
     }
 }
 
