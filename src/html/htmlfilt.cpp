@@ -157,7 +157,7 @@ wxString wxHtmlFilterHTML::ReadFile(const wxFSFile& file) const
         wxCharBuffer buf( size+1 );
         s->Read( buf.data(), size );
         *(buf.data() + size) = 0;
-        wxString tmpdoc( buf, wxConvISO8859_1);
+        wxString tmpdoc( buf, wxConvUTF8);
 
         wxString charset = wxHtmlParser::ExtractCharsetInformation(tmpdoc);
         if (charset.empty())
