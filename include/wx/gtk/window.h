@@ -14,6 +14,7 @@
 
 #ifdef __WXGTK3__
     typedef struct _cairo cairo_t;
+    typedef struct _GtkStyleProvider GtkStyleProvider;
     #define WXUNUSED_IN_GTK3(x)
 #else
     #define WXUNUSED_IN_GTK3(x) x
@@ -58,8 +59,6 @@ public:
 
     // implement base class (pure) virtual methods
     // -------------------------------------------
-
-    virtual bool Destroy();
 
     virtual void Raise();
     virtual void Lower();
@@ -185,11 +184,6 @@ public:
     static wxLayoutDirection GTKGetLayout(GtkWidget *widget);
     static void GTKSetLayout(GtkWidget *widget, wxLayoutDirection dir);
 
-    // return true if this window must have a non-NULL parent, false if it can
-    // be created without parent (normally only top level windows but in wxGTK
-    // there is also the exception of wxMenuBar)
-    virtual bool GTKNeedsParent() const { return !IsTopLevel(); }
-
     // This is called when capture is taken from the window. It will
     // fire off capture lost events.
     void GTKReleaseMouseAndNotify();
@@ -204,6 +198,7 @@ public:
     // Called when m_widget becomes realized. Derived classes must call the
     // base class method if they override it.
     virtual void GTKHandleRealized();
+    void GTKHandleUnrealize();
 
 protected:
     // for controls composed of multiple GTK widgets, return true to eliminate
@@ -255,7 +250,11 @@ public:
     // position and size of the window
     int                  m_x, m_y;
     int                  m_width, m_height;
-    int                  m_oldClientWidth,m_oldClientHeight;
+    int m_clientWidth, m_clientHeight;
+    // Whether the client size variables above are known to be correct
+    // (because they have been validated by a size-allocate) and should
+    // be used to report client size
+    bool m_useCachedClientSize;
 
     // see the docs in src/gtk/window.cpp
     GtkWidget           *m_widget;          // mostly the widget seen by the rest of GTK
@@ -307,7 +306,6 @@ public:
     // extra (wxGTK-specific) flags
     bool                 m_noExpose:1;          // wxGLCanvas has its own redrawing
     bool                 m_nativeSizeEvent:1;   // wxGLCanvas sends wxSizeEvent upon "alloc_size"
-    bool                 m_hasVMT:1;            // set after PostCreation() is called
     bool                 m_isScrolling:1;       // dragging scrollbar thumb?
     bool                 m_clipPaintRegion:1;   // true after ScrollWindow()
     wxRegion             m_nativeUpdateRegion;  // not transformed for RTL
@@ -351,13 +349,19 @@ protected:
 
     void GTKFreezeWidget(GtkWidget *w);
     void GTKThawWidget(GtkWidget *w);
+    void GTKDisconnect(void* instance);
 
 #if wxUSE_TOOLTIPS
     virtual void DoSetToolTip( wxToolTip *tip );
 #endif // wxUSE_TOOLTIPS
 
-    // common part of all ctors (not virtual because called from ctor)
-    void Init();
+    // Create a GtkScrolledWindow containing the given widget (usually
+    // m_wxwindow but not necessarily) and assigns it to m_widget. Also shows
+    // the widget passed to it.
+    //
+    // Can be only called if we have either wxHSCROLL or wxVSCROLL in our
+    // style.
+    void GTKCreateScrolledWindowWith(GtkWidget* view);
 
     virtual void DoMoveInTabOrder(wxWindow *win, WindowOrder move);
     virtual bool DoNavigateIn(int flags);
@@ -369,10 +373,8 @@ protected:
 #ifndef __WXGTK3__
     // Called by ApplyWidgetStyle (which is called by SetFont() and
     // SetXXXColour etc to apply style changed to native widgets) to create
-    // modified GTK style with non-standard attributes. If forceStyle=true,
-    // creates empty GtkRcStyle if there are no modifications, otherwise
-    // returns NULL in such case.
-    GtkRcStyle *GTKCreateWidgetStyle(bool forceStyle = false);
+    // modified GTK style with non-standard attributes.
+    GtkRcStyle* GTKCreateWidgetStyle();
 #endif
 
     void GTKApplyWidgetStyle(bool forceStyle = false);
@@ -395,6 +397,13 @@ protected:
     void ConstrainSize();
 
 private:
+    void Init();
+
+    // return true if this window must have a non-NULL parent, false if it can
+    // be created without parent (normally only top level windows but in wxGTK
+    // there is also the exception of wxMenuBar)
+    virtual bool GTKNeedsParent() const { return !IsTopLevel(); }
+
     enum ScrollUnit { ScrollUnit_Line, ScrollUnit_Page, ScrollUnit_Max };
 
     // common part of ScrollLines() and ScrollPages() and could be used, in the
@@ -408,6 +417,8 @@ private:
 #ifdef __WXGTK3__
     // paint context is stashed here so wxPaintDC can use it
     cairo_t* m_paintContext;
+    // style provider for "background-image"
+    GtkStyleProvider* m_styleProvider;
 
 public:
     cairo_t* GTKPaintContext() const

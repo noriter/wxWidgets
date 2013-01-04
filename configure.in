@@ -17,7 +17,7 @@ dnl ---------------------------------------------------------------------------
 dnl initialization
 dnl ---------------------------------------------------------------------------
 
-AC_INIT([wxWidgets], [2.9.4], [wx-dev@lists.wxwidgets.org])
+AC_INIT([wxWidgets], [2.9.5], [wx-dev@lists.wxwidgets.org])
 
 dnl the file passed to AC_CONFIG_SRCDIR should be specific to our package
 AC_CONFIG_SRCDIR([wx-config.in])
@@ -43,7 +43,7 @@ dnl wx_release_number += 1
 
 wx_major_version_number=2
 wx_minor_version_number=9
-wx_release_number=4
+wx_release_number=5
 wx_subrelease_number=0
 
 WX_RELEASE=$wx_major_version_number.$wx_minor_version_number
@@ -591,6 +591,7 @@ WX_ARG_WITH(libmspack,     [  --with-libmspack        use libmspack (CHM help fi
 WX_ARG_WITHOUT(gtkprint,   [  --without-gtkprint      don't use GTK printing support], wxUSE_GTKPRINT)
 WX_ARG_WITHOUT(gnomeprint, [  --without-gnomeprint    don't use GNOME printing libraries], wxUSE_LIBGNOMEPRINT)
 WX_ARG_WITH(gnomevfs,      [  --with-gnomevfs         use GNOME VFS for associating MIME types], wxUSE_LIBGNOMEVFS)
+WX_ARG_WITH(libnotify,     [  --with-libnotify        use libnotify for notifications], wxUSE_LIBNOTIFY)
 WX_ARG_WITH(hildon,        [  --with-hildon           use Hildon framework for Nokia 770/800/810], wxUSE_LIBHILDON)
 WX_ARG_WITH(opengl,        [  --with-opengl           use OpenGL (or Mesa)], wxUSE_OPENGL)
 
@@ -1034,7 +1035,7 @@ WX_ARG_FEATURE(dragimage,   [  --enable-dragimage      use wxDragImage], wxUSE_D
 WX_ARG_FEATURE(accessibility,[  --enable-accessibility  enable accessibility support], wxUSE_ACCESSIBILITY)
 WX_ARG_FEATURE(uiactionsim,  [  --enable-uiactionsim    use wxUIActionSimulator (experimental)], wxUSE_UIACTIONSIMULATOR)
 WX_ARG_FEATURE(dctransform,  [  --enable-dctransform    use wxDC::SetTransformMatrix and related], wxUSE_DC_TRANSFORM_MATRIX)
-WX_ARG_FEATURE(webviewwebkit,[  --enable-webview-webkit use wxWebView WebKit backend], wxUSE_WEBVIEW_WEBKIT)
+WX_ARG_FEATURE(webviewwebkit,[  --enable-webviewwebkit  use wxWebView WebKit backend], wxUSE_WEBVIEW_WEBKIT)
 
 dnl ---------------------------------------------------------------------------
 dnl support for image formats that do not rely on external library
@@ -1059,7 +1060,7 @@ WX_ARG_FEATURE(ps-in-msw,   [  --enable-ps-in-msw      use PS printing in wxMSW 
 WX_ARG_FEATURE(ownerdrawn,  [  --enable-ownerdrawn     use owner drawn controls (Win32 and OS/2 only)], wxUSE_OWNER_DRAWN)
 WX_ARG_FEATURE(uxtheme,     [  --enable-uxtheme        enable support for Windows XP themed look (Win32 only)], wxUSE_UXTHEME)
 WX_ARG_FEATURE(wxdib,       [  --enable-wxdib          use wxDIB class (Win32 only)], wxUSE_DIB)
-WX_ARG_FEATURE(webviewie,   [  --enable-webview-ie     use wxWebView IE backend (Win32 only)], wxUSE_WEBVIEW_IE)
+WX_ARG_FEATURE(webviewie,   [  --enable-webviewie      use wxWebView IE backend (Win32 only)], wxUSE_WEBVIEW_IE)
 
 dnl this one is not really MSW-specific but it exists mainly to be turned off
 dnl under MSW, it should be off by default on the other platforms
@@ -1168,13 +1169,6 @@ if test "x$wxUSE_UNIVERSAL_BINARY" != xno ; then
     dnl If we did move to libtool -static we still wouldn't need arch flags
     dnl because libtool automatically figures it out based on input.
     retest_macosx_linking=yes
-
-    dnl HACK: PCH could be made to work by precompiling for each architecture into separate directories
-    dnl and including all architecture directories with each compiler invocation.
-    dnl That would require a major rework of Bakefile and at the same time it would be nice to have
-    dnl Objective-C++ precompiled headers.
-    AC_MSG_WARN([Disabling precompiled headers due to universal binary build.])
-    bk_use_pch=no
 else
     if test "x$wxUSE_MAC_ARCH" != xno; then
         OSX_ARCH_OPTS=$wxUSE_MAC_ARCH
@@ -1184,8 +1178,16 @@ fi
 if test "x$OSX_ARCH_OPTS" != "x"; then
     dnl Check if there is more than one architecture
     if echo $OSX_ARCH_OPTS | grep -q ","; then
+        AC_MSG_WARN([Disabling dependency tracking due to universal binary build.])
         disable_macosx_deps=yes
-    fi     
+
+        dnl HACK: PCH could be made to work by precompiling for each architecture into separate directories
+        dnl and including all architecture directories with each compiler invocation.
+        dnl That would require a major rework of Bakefile and at the same time it would be nice to have
+        dnl Objective-C++ precompiled headers.
+        AC_MSG_WARN([Disabling precompiled headers due to universal binary build.])
+        bk_use_pch=no
+    fi
 
     OSX_ARCH_OPTS=`echo $OSX_ARCH_OPTS | sed -e 's/^/-arch /' -e 's/,/ -arch /g'`
 
@@ -1589,9 +1591,15 @@ case "${host}" in
   ;;
 esac
 
-dnl POSIX needs this for select(), but old systems don't have it
 if test "$USE_UNIX" = 1 ; then
+    dnl POSIX needs this for select(), but old systems don't have it
     AC_CHECK_HEADERS([sys/select.h],,, [AC_INCLUDES_DEFAULT()])
+
+    dnl Header defining C++ ABI is currently only available with g++ but test
+    dnl for it unconditionally in case it becomes supported by other compilers.
+    AC_LANG_PUSH(C++)
+    AC_CHECK_HEADERS([cxxabi.h],,, [AC_INCLUDES_DEFAULT()])
+    AC_LANG_POP()
 fi
 
 dnl ---------------------------------------------------------------------------
@@ -2890,7 +2898,7 @@ if test "$wxUSE_GUI" = "yes"; then
                     esac
 
                     if test "$wxGTK_VERSION" != 3; then
-                        AM_PATH_GTK_2_0(2.4.0, wx_cv_lib_gtk=2.0, , $GTK_MODULES)
+                        AM_PATH_GTK_2_0(2.6.0, wx_cv_lib_gtk=2.0, , $GTK_MODULES)
                     fi
                     if test -z "$wx_cv_lib_gtk"; then
                         if test "$wxGTK_VERSION" = 3 -o "$wxGTK_VERSION" = any; then
@@ -2956,7 +2964,6 @@ libraries returned by 'pkg-config gtk+-2.0 --libs' or 'gtk-config
         if test "$WXGTK3" = 1; then
             AC_DEFINE(__WXGTK218__)
             AC_DEFINE(__WXGTK210__)
-            AC_DEFINE(__WXGTK26__)
         elif test "$WXGTK2" = 1; then
             save_CFLAGS="$CFLAGS"
             save_LIBS="$LIBS"
@@ -2976,7 +2983,6 @@ libraries returned by 'pkg-config gtk+-2.0 --libs' or 'gtk-config
                            [
                             AC_DEFINE(__WXGTK218__)
                             AC_DEFINE(__WXGTK210__)
-                            AC_DEFINE(__WXGTK26__)
                             AC_MSG_RESULT([yes])
                             ac_wxgtk218=1
                            ],
@@ -2998,7 +3004,6 @@ libraries returned by 'pkg-config gtk+-2.0 --libs' or 'gtk-config
                                ],
                                [
                                 AC_DEFINE(__WXGTK210__)
-                                AC_DEFINE(__WXGTK26__)
                                 AC_MSG_RESULT([yes])
                                 ac_wxgtk210=1
                                ],
@@ -3006,28 +3011,6 @@ libraries returned by 'pkg-config gtk+-2.0 --libs' or 'gtk-config
                                 AC_MSG_RESULT([no])
                                 ac_wxgtk210=0
                                ])
-
-                if test "$ac_wxgtk210" = 0; then
-                    dnl test if we have at least GTK+ 2.6:
-                    AC_MSG_CHECKING([if GTK+ is version >= 2.6])
-                    AC_TRY_COMPILE([
-                                    #include <gtk/gtk.h>
-                                ],
-                                [
-                                    #if !GTK_CHECK_VERSION(2,6,0)
-                                    Not GTK+ 2.6
-                                    #endif
-                                ],
-                                [
-                                    AC_DEFINE(__WXGTK26__)
-                                    AC_MSG_RESULT([yes])
-                                    ac_wxgtk26=1
-                                ],
-                                [
-                                    AC_MSG_RESULT([no])
-                                    ac_wxgtk26=0
-                                ])
-                fi
             fi
 
             CFLAGS="$save_CFLAGS"
@@ -4404,20 +4387,24 @@ if test "$wxUSE_STACKWALKER" = "yes" -a "$wxUSE_UNIX" = "yes"; then
         AC_MSG_WARN([backtrace() is not available, wxStackWalker will not be available])
         wxUSE_STACKWALKER=no
     else
-        AC_CACHE_CHECK([for __cxa_demangle() in <cxxabi.h>], wx_cv_func_cxa_demangle,
-            [
-                AC_LANG_PUSH(C++)
-                AC_TRY_LINK([#include <cxxabi.h>],
-                    [
-                        int rc;
-                        __cxxabiv1::__cxa_demangle("foo", 0, 0, &rc);
-                    ],
-                    wx_cv_func_cxa_demangle=yes,
-                    wx_cv_func_cxa_demangle=no
-                )
-                AC_LANG_POP()
-            ]
-        )
+        if test "$ac_cv_header_cxxabi_h" = "yes"; then
+            AC_CACHE_CHECK([for __cxa_demangle() in <cxxabi.h>], wx_cv_func_cxa_demangle,
+                [
+                    AC_LANG_PUSH(C++)
+                    AC_TRY_LINK([#include <cxxabi.h>],
+                        [
+                            int rc;
+                            __cxxabiv1::__cxa_demangle("foo", 0, 0, &rc);
+                        ],
+                        wx_cv_func_cxa_demangle=yes,
+                        wx_cv_func_cxa_demangle=no
+                    )
+                    AC_LANG_POP()
+                ]
+            )
+        else
+            wx_cv_func_cxa_demangle=no
+        fi
 
         if test "$wx_cv_func_cxa_demangle" = "yes"; then
             AC_DEFINE(HAVE_CXA_DEMANGLE)
@@ -5112,6 +5099,29 @@ if test "$TOOLKIT" != "MSW" -a "$USE_OS2" != 1; then
             AC_DEFINE(HAVE___THREAD_KEYWORD)
           fi
         fi
+
+        if test "$ac_cv_header_cxxabi_h" = "yes"; then
+            AC_CACHE_CHECK([for abi::__forced_unwind() in <cxxabi.h>],
+                wx_cv_type_abi_forced_unwind,
+                [
+                    AC_LANG_PUSH(C++)
+                    AC_TRY_COMPILE([#include <cxxabi.h>],
+                        [
+                            void foo(abi::__forced_unwind&);
+                        ],
+                        wx_cv_type_abi_forced_unwind=yes,
+                        wx_cv_type_abi_forced_unwind=no
+                    )
+                    AC_LANG_POP()
+                ]
+            )
+        else
+            wx_cv_type_abi_forced_unwind=no
+        fi
+
+        if test "$wx_cv_type_abi_forced_unwind" = "yes"; then
+            AC_DEFINE(HAVE_ABI_FORCEDUNWIND)
+        fi
     fi
 
 dnl from if !MSW
@@ -5632,6 +5642,7 @@ if test "$WXGTK2" = 1; then
                 PKG_CHECK_MODULES(GTKPRINT,
                                   [$gtk_unix_print],
                     [
+                        GUI_TK_LIBRARY="$GUI_TK_LIBRARY $GTKPRINT_LIBS"
                         CFLAGS="$GTKPRINT_CFLAGS $CFLAGS"
                         CXXFLAGS="$GTKPRINT_CFLAGS $CXXFLAGS"
                         AC_DEFINE(wxUSE_GTKPRINT)
@@ -5652,6 +5663,7 @@ if test "$WXGTK2" = 1; then
                 PKG_CHECK_MODULES(LIBGNOMEPRINTUI,
                                   [libgnomeprintui-2.2 >= 2.8],
                     [
+                        GUI_TK_LIBRARY="$GUI_TK_LIBRARY $LIBGNOMEPRINTUI_LIBS"
                         CFLAGS="$LIBGNOMEPRINTUI_CFLAGS $CFLAGS"
                         CXXFLAGS="$LIBGNOMEPRINTUI_CFLAGS $CXXFLAGS"
                         AC_DEFINE(wxUSE_LIBGNOMEPRINT)
@@ -5674,6 +5686,7 @@ if test "$WXGTK2" = 1; then
                 PKG_CHECK_MODULES(GNOMEVFS,
                                   [gnome-vfs-2.0 >= 2.0],
                     [
+                        GUI_TK_LIBRARY="$GUI_TK_LIBRARY $GNOMEVFS_LIBS"
                         CFLAGS="$GNOMEVFS_CFLAGS $CFLAGS"
                         CXXFLAGS="$GNOMEVFS_CFLAGS $CXXFLAGS"
                         AC_DEFINE(wxUSE_LIBGNOMEVFS)
@@ -5686,11 +5699,36 @@ if test "$WXGTK2" = 1; then
         fi
     fi
 
+    if test "$wxUSE_NOTIFICATION_MESSAGE" = "yes" ; then
+        if test "$wxUSE_LIBNOTIFY" = "yes" ; then
+            HAVE_LIBNOTIFY=0
+            PKG_CHECK_MODULES(LIBNOTIFY, [libnotify >= 0.7],
+                [
+                    HAVE_LIBNOTIFY=1
+                    AC_DEFINE(wxUSE_LIBNOTIFY_0_7)
+                ],
+                [
+                    PKG_CHECK_MODULES(LIBNOTIFY, [libnotify >= 0.4],
+                        [HAVE_LIBNOTIFY=1],
+                        [AC_MSG_WARN([libnotify not found, wxNotificationMessage will use generic implementation.])]
+                    )
+                ]
+            )
+
+            if test "$HAVE_LIBNOTIFY" = "1" ; then
+                GUI_TK_LIBRARY="$GUI_TK_LIBRARY $LIBNOTIFY_LIBS"
+                CFLAGS="$LIBNOTIFY_CFLAGS $CFLAGS"
+                CXXFLAGS="$LIBNOTIFY_CFLAGS $CXXFLAGS"
+                AC_DEFINE(wxUSE_LIBNOTIFY)
+            fi
+        fi
+    fi
+
     if test "$wxUSE_LIBHILDON" = "yes" ; then
         PKG_CHECK_MODULES(HILDON,
                           [hildon-lgpl >= 0.9],
             [
-                EXTRALIBS_HILDON="$HILDON_LIBS"
+                GUI_TK_LIBRARY="$GUI_TK_LIBRARY $HILDON_LIBS"
                 CFLAGS="$CFLAGS $HILDON_CFLAGS"
                 CXXFLAGS="$CXXFLAGS $HILDON_CFLAGS"
                 AC_DEFINE(wxUSE_LIBHILDON)
@@ -5707,7 +5745,7 @@ if test "$WXGTK2" = 1; then
             PKG_CHECK_MODULES(HILDON2,
                               [hildon-1 >= 1.99],
                 [
-                    EXTRALIBS_HILDON="$HILDON2_LIBS"
+                    GUI_TK_LIBRARY="$GUI_TK_LIBRARY $HILDON2_LIBS"
                     CFLAGS="$CFLAGS $HILDON2_CFLAGS"
                     CXXFLAGS="$CXXFLAGS $HILDON2_CFLAGS"
                     AC_DEFINE(wxUSE_LIBHILDON2)
@@ -7566,6 +7604,11 @@ if test "$wxUSE_MEDIACTRL" = "yes" -o "$wxUSE_MEDIACTRL" = "auto"; then
         else
             USE_MEDIA=0
         fi
+
+    elif test "$wxUSE_MAC" = 1; then 
+         dnl We always have the necessary libraries under Mac 
+         dnl but we need to link with it explicitly.
+         GST_LIBS="-framework QTKit"
     fi
 
     if test $USE_MEDIA = 1; then
@@ -7868,7 +7911,7 @@ EXTRALIBS_HTML="$MSPACK_LINK"
 EXTRALIBS_MEDIA="$GST_LIBS"
 EXTRALIBS_STC="-lwxscintilla${WX_LIB_FLAVOUR}-${WX_RELEASE}${HOST_SUFFIX}"
 if test "$wxUSE_GUI" = "yes"; then
-    EXTRALIBS_GUI=`echo $GUI_TK_LIBRARY $PNG_LINK $JPEG_LINK $TIFF_LINK $WEBKIT_LINK $EXTRALIBS_HILDON $EXTRALIBS_GNOMEVFS $EXTRALIBS_GNOMEPRINT`
+    EXTRALIBS_GUI=`echo $GUI_TK_LIBRARY $PNG_LINK $JPEG_LINK $TIFF_LINK $WEBKIT_LINK`
 fi
 if test "$wxUSE_OPENGL" = "yes"; then
     EXTRALIBS_OPENGL="$LDFLAGS_GL $OPENGL_LIBS"
@@ -7970,10 +8013,6 @@ AC_SUBST(EXTRALIBS_OPENGL)
 AC_SUBST(EXTRALIBS_SDL)
 AC_SUBST(EXTRALIBS_STC)
 AC_SUBST(WITH_PLUGIN_SDL)
-AC_SUBST(EXTRALIBS_GTKPRINT)
-AC_SUBST(EXTRALIBS_GNOMEPRINT)
-AC_SUBST(EXTRALIBS_GNOMEVFS)
-AC_SUBST(EXTRALIBS_HILDON)
 AC_SUBST(UNICODE)
 AC_SUBST(DEBUG_INFO)
 AC_SUBST(DEBUG_FLAG)
@@ -8005,6 +8044,9 @@ case "$TOOLKIT" in
             fi
             if test "$wxUSE_LIBGNOMEVFS" = "yes" ; then
                 TOOLKIT_EXTRA="$TOOLKIT_EXTRA gnomevfs"
+            fi
+            if test "$wxUSE_LIBNOTIFY" = "yes" ; then
+                TOOLKIT_EXTRA="$TOOLKIT_EXTRA libnotify"
             fi
             if test "$wxUSE_LIBHILDON" = "yes"; then
                 TOOLKIT_EXTRA="$TOOLKIT_EXTRA hildon"
@@ -8173,10 +8215,10 @@ dnl at which time, this hack can be removed.
 if test "$wxUSE_MAC" = 1 ; then
     if test "x$wxUSE_UNIVERSAL_BINARY" != "xno" ; then
         if test "x$disable_macosx_deps" = "xyes"; then
-	    sed "s/DEPSMODE=gcc/DEPSMODE=none/" < bk-deps > temp
-	    mv temp bk-deps
+            sed "s/DEPSMODE=gcc/DEPSMODE=none/" < bk-deps > temp
+                mv temp bk-deps
             chmod +x bk-deps
-	fi
+        fi
     fi
 fi
 

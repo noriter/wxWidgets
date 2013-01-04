@@ -141,6 +141,9 @@ private:
         CPPUNIT_TEST( TestGetTimes );
         CPPUNIT_TEST( TestExists );
         CPPUNIT_TEST( TestIsSame );
+#if defined(__UNIX__)
+        CPPUNIT_TEST( TestSymlinks );
+#endif // __UNIX__
     CPPUNIT_TEST_SUITE_END();
 
     void TestConstruction();
@@ -160,6 +163,9 @@ private:
     void TestGetTimes();
     void TestExists();
     void TestIsSame();
+#if defined(__UNIX__)
+    void TestSymlinks();
+#endif // __UNIX__
 
     DECLARE_NO_COPY_CLASS(FileNameTestCase)
 };
@@ -666,17 +672,56 @@ void FileNameTestCase::TestExists()
 
     CPPUNIT_ASSERT( fn.FileExists() );
     CPPUNIT_ASSERT( !wxFileName::DirExists(fn.GetFullPath()) );
+
+    // FIXME-VC6: This compiler crashes with
+    //
+    //      fatal error C1001: INTERNAL COMPILER ERROR
+    //      (compiler file 'msc1.cpp', line 1794)
+    //
+    // when compiling calls to Exists() with parameter for some reason, just
+    // disable these tests there.
+#ifndef __VISUALC6__
+    CPPUNIT_ASSERT( fn.Exists(wxFILE_EXISTS_REGULAR) );
+    CPPUNIT_ASSERT( !fn.Exists(wxFILE_EXISTS_DIR) );
+#endif
     CPPUNIT_ASSERT( fn.Exists() );
 
-    wxFileName dirTemp(wxFileName::DirName(wxFileName::GetTempDir()));
+    const wxString& tempdir = wxFileName::GetTempDir();
+
+    wxFileName fileInTempDir(tempdir, "bloordyblop");
+    CPPUNIT_ASSERT( !fileInTempDir.Exists() );
+    CPPUNIT_ASSERT( fileInTempDir.DirExists() );
+
+    wxFileName dirTemp(wxFileName::DirName(tempdir));
     CPPUNIT_ASSERT( !dirTemp.FileExists() );
     CPPUNIT_ASSERT( dirTemp.DirExists() );
+
+#ifndef __VISUALC6__
+    CPPUNIT_ASSERT( dirTemp.Exists(wxFILE_EXISTS_DIR) );
+    CPPUNIT_ASSERT( !dirTemp.Exists(wxFILE_EXISTS_REGULAR) );
+#endif
     CPPUNIT_ASSERT( dirTemp.Exists() );
 
 #ifdef __UNIX__
     CPPUNIT_ASSERT( !wxFileName::FileExists("/dev/null") );
     CPPUNIT_ASSERT( !wxFileName::DirExists("/dev/null") );
     CPPUNIT_ASSERT( wxFileName::Exists("/dev/null") );
+    CPPUNIT_ASSERT( wxFileName::Exists("/dev/null", wxFILE_EXISTS_DEVICE) );
+#ifdef __LINUX__
+    // These files are only guaranteed to exist under Linux.
+    // No need for wxFILE_EXISTS_NO_FOLLOW here; wxFILE_EXISTS_SYMLINK implies it
+    CPPUNIT_ASSERT( wxFileName::Exists("/dev/core", wxFILE_EXISTS_SYMLINK) );
+    CPPUNIT_ASSERT( wxFileName::Exists("/dev/log", wxFILE_EXISTS_SOCKET) );
+#endif // __LINUX__
+#ifndef __VMS
+    wxString fifo = dirTemp.GetPath() + "/fifo";
+   if (mkfifo(fifo.c_str(), 0600) == 0)
+    {
+        wxON_BLOCK_EXIT1(wxRemoveFile, fifo);
+
+        CPPUNIT_ASSERT( wxFileName::Exists(fifo, wxFILE_EXISTS_FIFO) );
+    }
+#endif
 #endif // __UNIX__
 }
 
@@ -709,7 +754,7 @@ void FileNameTestCase::TestIsSame()
     tn = tempnam(NULL, "wxfn2");
     const wxString tempdir2 = wxString::From8BitData(tn);
     free(tn);
-    CPPUNIT_ASSERT_EQUAL( 0, symlink(tempdir1, tempdir2) );
+    CPPUNIT_ASSERT_EQUAL( 0, symlink(tempdir1.c_str(), tempdir2.c_str()) );
     wxON_BLOCK_EXIT1( wxRemoveFile, tempdir2 );
 
 
@@ -727,3 +772,200 @@ void FileNameTestCase::TestIsSame()
     CPPUNIT_ASSERT( fn3.SameAs(fn4) );
 #endif // __UNIX__
 }
+
+#if defined(__UNIX__)
+
+// Tests for functions that are changed by ShouldFollowLink()
+void FileNameTestCase::TestSymlinks()
+{
+    const wxString tmpdir(wxStandardPaths::Get().GetTempDir());
+
+    wxFileName tmpfn(wxFileName::DirName(tmpdir));
+
+    wxDateTime dtAccessTmp, dtModTmp, dtCreateTmp;
+    CPPUNIT_ASSERT(tmpfn.GetTimes(&dtAccessTmp, &dtModTmp, &dtCreateTmp));
+
+    // Create a temporary directory
+#ifdef __VMS
+    wxString name = tmpdir + ".filenametestXXXXXX]";
+    mkdir( name.char_str() , 0222 );
+    wxString tempdir = name;
+#else
+    wxString name = tmpdir + "/filenametestXXXXXX";
+    wxString tempdir = wxString::From8BitData(mkdtemp(name.char_str()));
+    tempdir << wxFileName::GetPathSeparator();
+#endif
+    wxFileName tempdirfn(wxFileName::DirName(tempdir));
+    CPPUNIT_ASSERT(tempdirfn.DirExists());
+
+    // Create a regular file in that dir, to act as a symlink target
+    wxFileName targetfn(wxFileName::CreateTempFileName(tempdir));
+    CPPUNIT_ASSERT(targetfn.FileExists());
+
+    // Create a symlink to that file
+    wxFileName linktofile(tempdir, "linktofile");
+    CPPUNIT_ASSERT_EQUAL(0, symlink(targetfn.GetFullPath().c_str(),
+                                        linktofile.GetFullPath().c_str()));
+
+    // ... and another to the temporary directory
+    const wxString linktodirName(tempdir + "/linktodir");
+    wxFileName linktodir(wxFileName::DirName(linktodirName));
+    CPPUNIT_ASSERT_EQUAL(0, symlink(tmpfn.GetFullPath().c_str(),
+                                        linktodirName.c_str()));
+
+    // And symlinks to both of those symlinks
+    wxFileName linktofilelnk(tempdir, "linktofilelnk");
+    CPPUNIT_ASSERT_EQUAL(0, symlink(linktofile.GetFullPath().c_str(),
+                                    linktofilelnk.GetFullPath().c_str()));
+    wxFileName linktodirlnk(tempdir, "linktodirlnk");
+    CPPUNIT_ASSERT_EQUAL(0, symlink(linktodir.GetFullPath().c_str(),
+                                    linktodirlnk.GetFullPath().c_str()));
+
+    // Run the tests twice: once in the default symlink following mode and the
+    // second time without following symlinks.
+    bool deref = true;
+    for ( int n = 0; n < 2; ++n, deref = !deref )
+    {
+        const std::string msg(deref ? " failed for the link target"
+                                    : " failed for the path itself");
+
+        if ( !deref )
+        {
+            linktofile.DontFollowLink();
+            linktodir.DontFollowLink();
+            linktofilelnk.DontFollowLink();
+            linktodirlnk.DontFollowLink();
+        }
+
+        // Test SameAs()
+        CPPUNIT_ASSERT_EQUAL_MESSAGE
+        (
+            "Comparison with file" + msg,
+            deref, linktofile.SameAs(targetfn)
+        );
+
+        CPPUNIT_ASSERT_EQUAL_MESSAGE
+        (
+            "Comparison with directory" + msg,
+            deref, linktodir.SameAs(tmpfn)
+        );
+
+        // A link-to-a-link should dereference through to the final target
+        CPPUNIT_ASSERT_EQUAL_MESSAGE
+        (
+            "Comparison with link to a file" + msg,
+            deref,
+            linktofilelnk.SameAs(targetfn)
+        );
+        CPPUNIT_ASSERT_EQUAL_MESSAGE
+        (
+            "Comparison with link to a directory" + msg,
+            deref,
+            linktodirlnk.SameAs(tmpfn)
+        );
+
+        // Test GetTimes()
+        wxDateTime dtAccess, dtMod, dtCreate;
+        CPPUNIT_ASSERT_MESSAGE
+        (
+            "Getting times of a directory" + msg,
+            linktodir.GetTimes(&dtAccess, &dtMod, &dtCreate)
+        );
+
+        // IsEqualTo() should be true only when dereferencing. Don't test each
+        // individually: accessing to create the link will have updated some
+        bool equal = dtCreate.IsEqualTo(dtCreateTmp) &&
+                     dtMod.IsEqualTo(dtModTmp) &&
+                     dtAccess.IsEqualTo(dtAccessTmp);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE
+        (
+            "Comparing directory times" + msg,
+            deref,
+            equal
+        );
+
+        // Test (File|Dir)Exists()
+        CPPUNIT_ASSERT_EQUAL_MESSAGE
+        (
+            "Testing file existence" + msg,
+            deref,
+            linktofile.FileExists()
+        );
+        CPPUNIT_ASSERT_EQUAL_MESSAGE
+        (
+            "Testing directory existence" + msg,
+            deref,
+            linktodir.DirExists()
+        );
+
+        // Test wxFileName::Exists
+        // The wxFILE_EXISTS_NO_FOLLOW flag should override DontFollowLink()
+        CPPUNIT_ASSERT_EQUAL_MESSAGE
+        (
+            "Testing file existence" + msg,
+            false,
+            linktofile.Exists(wxFILE_EXISTS_REGULAR | wxFILE_EXISTS_NO_FOLLOW)
+        );
+        CPPUNIT_ASSERT_EQUAL_MESSAGE
+        (
+            "Testing directory existence" + msg,
+            false,
+            linktodir.Exists(wxFILE_EXISTS_DIR | wxFILE_EXISTS_NO_FOLLOW)
+        );
+        // and the static versions
+        CPPUNIT_ASSERT_EQUAL_MESSAGE
+        (
+            "Testing file existence" + msg,
+            false,
+            wxFileName::Exists(linktofile.GetFullPath(), wxFILE_EXISTS_REGULAR | wxFILE_EXISTS_NO_FOLLOW)
+        );
+        CPPUNIT_ASSERT_EQUAL_MESSAGE
+        (
+            "Testing file existence" + msg,
+            true,
+            wxFileName::Exists(linktofile.GetFullPath(), wxFILE_EXISTS_REGULAR)
+        );
+        CPPUNIT_ASSERT_EQUAL_MESSAGE
+        (
+            "Testing directory existence" + msg,
+            false,
+            wxFileName::Exists(linktodir.GetFullPath(), wxFILE_EXISTS_DIR | wxFILE_EXISTS_NO_FOLLOW)
+        );
+        CPPUNIT_ASSERT_EQUAL_MESSAGE
+        (
+            "Testing directory existence" + msg,
+            true,
+            wxFileName::Exists(linktodir.GetFullPath(), wxFILE_EXISTS_DIR)
+        );
+    }
+
+    // Finally test Exists() after removing the file.
+    CPPUNIT_ASSERT(wxRemoveFile(targetfn.GetFullPath()));
+    // This should succeed, as the symlink still exists and
+    // the default wxFILE_EXISTS_ANY implies wxFILE_EXISTS_NO_FOLLOW
+    CPPUNIT_ASSERT(wxFileName(tempdir, "linktofile").Exists());
+    // So should this one, as wxFILE_EXISTS_SYMLINK does too
+    CPPUNIT_ASSERT(wxFileName(tempdir, "linktofile").
+                                            Exists(wxFILE_EXISTS_SYMLINK));
+    // but not this one, as the now broken symlink is followed
+    CPPUNIT_ASSERT(!wxFileName(tempdir, "linktofile").
+                                            Exists(wxFILE_EXISTS_REGULAR));
+    CPPUNIT_ASSERT(linktofile.Exists());
+
+    // This is also a convenient place to test Rmdir() as we have things to
+    // remove.
+
+    // First, check that removing a symlink to a directory fails.
+    CPPUNIT_ASSERT( !wxFileName::Rmdir(linktodirName) );
+
+    // And recursively removing it only removes the symlink itself, not the
+    // directory.
+    CPPUNIT_ASSERT( wxFileName::Rmdir(linktodirName, wxPATH_RMDIR_RECURSIVE) );
+    CPPUNIT_ASSERT( tmpfn.Exists() );
+
+    // Finally removing the directory itself does remove everything.
+    CPPUNIT_ASSERT(tempdirfn.Rmdir(wxPATH_RMDIR_RECURSIVE));
+    CPPUNIT_ASSERT( !tempdirfn.Exists() );
+}
+
+#endif // __UNIX__

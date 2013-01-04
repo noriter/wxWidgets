@@ -318,9 +318,6 @@ AppFrame::AppFrame (const wxString &title)
     SetTitle (*g_appname);
     SetBackgroundColour (wxT("WHITE"));
 
-    // about box shown for 1 seconds
-    AppAbout dlg(this, 1000);
-
     // create menu
     m_menuBar = new wxMenuBar;
     CreateMenu ();
@@ -587,6 +584,7 @@ void AppFrame::FileOpen (wxString fname)
 {
     wxFileName w(fname); w.Normalize(); fname = w.GetFullPath();
     m_edit->LoadFile (fname);
+    m_edit->SelectNone();
 }
 
 wxRect AppFrame::DeterminePrintSize () {

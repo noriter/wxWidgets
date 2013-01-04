@@ -426,6 +426,27 @@ wxSpinCtrl::~wxSpinCtrl()
 }
 
 // ----------------------------------------------------------------------------
+// wxSpinCtrl-specific methods
+// ----------------------------------------------------------------------------
+
+int wxSpinCtrl::GetBase() const
+{
+    return ::SendMessage(GetHwnd(), UDM_GETBASE, 0, 0);
+}
+
+bool wxSpinCtrl::SetBase(int base)
+{
+    if ( !::SendMessage(GetHwnd(), UDM_SETBASE, base, 0) )
+        return false;
+
+    // Whether we need to be able enter "x" or not influences whether we should
+    // use ES_NUMBER for the buddy control.
+    UpdateBuddyStyle();
+
+    return true;
+}
+
+// ----------------------------------------------------------------------------
 // wxTextCtrl-like methods
 // ----------------------------------------------------------------------------
 
@@ -443,16 +464,28 @@ void  wxSpinCtrl::SetValue(int val)
 
     wxSpinButton::SetValue(val);
 
-    // normally setting the value of the spin button is enough as it updates
-    // its buddy control automatically ...
-    if ( wxGetWindowText(m_hwndBuddy).empty() )
+    // Normally setting the value of the spin button is enough as it updates
+    // its buddy control automatically but in a couple of situations it doesn't
+    // do it, for whatever reason, do it explicitly then:
+    const wxString text = wxGetWindowText(m_hwndBuddy);
+
+    // First case is when the text control is empty and the value is 0: the
+    // spin button just leaves it empty in this case, while we want to show 0
+    // in it.
+    if ( text.empty() && !val )
     {
-        // ... but sometimes it doesn't, notably when the value is 0 and the
-        // text control is currently empty, the spin button seems to be happy
-        // to leave it like this, while we really want to always show the
-        // current value in the control, so do it manually
+        ::SetWindowText(GetBuddyHwnd(), wxT("0"));
+    }
+
+    // Another one is when we're using hexadecimal base but the user input
+    // doesn't start with "0x" -- we prefer to show it to avoid ambiguity
+    // between decimal and hexadecimal.
+    if ( GetBase() == 16 &&
+            (text.length() < 3 || text[0] != '0' ||
+                (text[1] != 'x' && text[1] != 'X')) )
+    {
         ::SetWindowText(GetBuddyHwnd(),
-                        wxString::Format(wxT("%d"), val).t_str());
+                        wxPrivate::wxSpinCtrlFormatAsHex(val, m_max).t_str());
     }
 
     m_oldValue = GetValue();
@@ -462,10 +495,10 @@ void  wxSpinCtrl::SetValue(int val)
 
 int wxSpinCtrl::GetValue() const
 {
-    wxString val = wxGetWindowText(m_hwndBuddy);
+    const wxString val = wxGetWindowText(m_hwndBuddy);
 
     long n;
-    if ( (wxSscanf(val, wxT("%ld"), &n) != 1) )
+    if ( !val.ToLong(&n, GetBase()) )
         n = INT_MIN;
 
     if ( n < m_min )
@@ -494,14 +527,29 @@ void wxSpinCtrl::SetSelection(long from, long to)
 
 void wxSpinCtrl::SetRange(int minVal, int maxVal)
 {
+    // Manually adjust the old value to avoid an event being sent from
+    // NormalizeValue() called from inside the base class SetRange() as we're
+    // not supposed to generate any events from here.
+    if ( m_oldValue < minVal )
+        m_oldValue = minVal;
+    else if ( m_oldValue > maxVal )
+        m_oldValue = maxVal;
+
     wxSpinButton::SetRange(minVal, maxVal);
 
+    UpdateBuddyStyle();
+}
+
+void wxSpinCtrl::UpdateBuddyStyle()
+{
     // this control is used for numeric entry so restrict the input to numeric
     // keys only -- but only if we don't need to be able to enter "-" in it as
-    // otherwise this would become impossible
+    // otherwise this would become impossible and also if we don't use
+    // hexadecimal as entering "x" of the "0x" prefix wouldn't be allowed
+    // neither then
     const DWORD styleOld = ::GetWindowLong(GetBuddyHwnd(), GWL_STYLE);
     DWORD styleNew;
-    if ( minVal < 0 )
+    if ( m_min < 0 || GetBase() != 10 )
         styleNew = styleOld & ~ES_NUMBER;
     else
         styleNew = styleOld | ES_NUMBER;
@@ -632,7 +680,7 @@ void wxSpinCtrl::SendSpinUpdate(int value)
 }
 
 bool wxSpinCtrl::MSWOnScroll(int WXUNUSED(orientation), WXWORD wParam,
-                               WXWORD pos, WXHWND control)
+                             WXWORD WXUNUSED(pos), WXHWND control)
 {
     wxCHECK_MSG( control, false, wxT("scrolling what?") );
 
@@ -642,11 +690,13 @@ bool wxSpinCtrl::MSWOnScroll(int WXUNUSED(orientation), WXWORD wParam,
         return false;
     }
 
-    int new_value = (short) pos;
+    // Notice that we can't use "pos" from WM_VSCROLL as it is 16 bit and we
+    // might be using 32 bit range.
+    int new_value = GetValue();
     if (m_oldValue != new_value)
        SendSpinUpdate( new_value );
 
-    return TRUE;
+    return true;
 }
 
 bool wxSpinCtrl::MSWOnNotify(int WXUNUSED(idCtrl), WXLPARAM lParam, WXLPARAM *result)
@@ -668,25 +718,28 @@ bool wxSpinCtrl::MSWOnNotify(int WXUNUSED(idCtrl), WXLPARAM lParam, WXLPARAM *re
 
 wxSize wxSpinCtrl::DoGetBestSize() const
 {
+    return DoGetSizeFromTextSize(DEFAULT_ITEM_WIDTH);
+}
+
+wxSize wxSpinCtrl::DoGetSizeFromTextSize(int xlen, int ylen) const
+{
     wxSize sizeBtn = wxSpinButton::DoGetBestSize();
-    sizeBtn.x += DEFAULT_ITEM_WIDTH + MARGIN_BETWEEN;
 
     int y;
     wxGetCharSize(GetHWND(), NULL, &y, GetFont());
-    y = EDIT_HEIGHT_FROM_CHAR_HEIGHT(y);
-
     // JACS: we should always use the height calculated
     // from above, because otherwise we'll get a spin control
     // that's too big. So never use the height calculated
     // from wxSpinButton::DoGetBestSize().
 
-    // if ( sizeBtn.y < y )
-    {
-        // make the text tall enough
-        sizeBtn.y = y;
-    }
+    wxSize tsize(xlen + sizeBtn.x + MARGIN_BETWEEN + 0.3 * y + 10,
+                 EDIT_HEIGHT_FROM_CHAR_HEIGHT(y));
 
-    return sizeBtn;
+    // Check if the user requested a non-standard height.
+    if ( ylen > 0 )
+        tsize.IncBy(0, ylen - y);
+
+    return tsize;
 }
 
 void wxSpinCtrl::DoMoveWindow(int x, int y, int width, int height)

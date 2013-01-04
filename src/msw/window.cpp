@@ -81,6 +81,7 @@
 #include "wx/msw/private.h"
 #include "wx/msw/private/keyboard.h"
 #include "wx/msw/dcclient.h"
+#include "wx/private/textmeasure.h"
 
 #if wxUSE_TOOLTIPS
     #include "wx/tooltip.h"
@@ -670,6 +671,7 @@ wxWindowMSW::MSWShowWithEffect(bool show,
                                wxShowEffect effect,
                                unsigned timeout)
 {
+#if wxUSE_DYNLIB_CLASS
     if ( effect == wxSHOW_EFFECT_NONE )
         return Show(show);
 
@@ -766,6 +768,9 @@ wxWindowMSW::MSWShowWithEffect(bool show,
     }
 
     return true;
+#else    // wxUSE_DYNLIB_CLASS
+    return Show(show);
+#endif
 }
 
 // Raise the window to the top of the Z order
@@ -2160,31 +2165,18 @@ void wxWindowMSW::DoGetTextExtent(const wxString& string,
                                   int *externalLeading,
                                   const wxFont *fontToUse) const
 {
-    wxASSERT_MSG( !fontToUse || fontToUse->IsOk(),
-                    wxT("invalid font in GetTextExtent()") );
-
-    HFONT hfontToUse;
-    if ( fontToUse )
-        hfontToUse = GetHfontOf(*fontToUse);
+    // ensure we work with a valid font
+    wxFont font;
+    if ( !fontToUse || !fontToUse->IsOk() )
+        font = GetFont();
     else
-        hfontToUse = GetHfontOf(GetFont());
+        font = *fontToUse;
 
-    WindowHDC hdc(GetHwnd());
-    SelectInHDC selectFont(hdc, hfontToUse);
+    wxCHECK_RET( font.IsOk(), wxT("invalid font in GetTextExtent()") );
 
-    SIZE sizeRect;
-    TEXTMETRIC tm;
-    ::GetTextExtentPoint32(hdc, string.t_str(), string.length(), &sizeRect);
-    GetTextMetrics(hdc, &tm);
-
-    if ( x )
-        *x = sizeRect.cx;
-    if ( y )
-        *y = sizeRect.cy;
-    if ( descent )
-        *descent = tm.tmDescent;
-    if ( externalLeading )
-        *externalLeading = tm.tmExternalLeading;
+    const wxWindow* win = static_cast<const wxWindow*>(this);
+    wxTextMeasure txm(win, &font);
+    txm.GetTextExtent(string, x, y, descent, externalLeading);
 }
 
 // ---------------------------------------------------------------------------
@@ -4824,6 +4816,8 @@ bool wxWindowMSW::HandlePaint()
     // be called from inside the event handlers called above)
     m_updateRegion.Clear();
 
+    wxPaintDCImpl::EndPaint((wxWindow *)this);
+
     return processed;
 }
 
@@ -5678,21 +5672,6 @@ MSWInitAnyKeyEvent(wxKeyEvent& event,
 #ifndef __WXWINCE__
     event.SetTimestamp(::GetMessageTime());
 #endif
-
-    // Event coordinates must be in window client coordinates system which
-    // doesn't make sense if there is no window.
-    //
-    // We could use screen coordinates for such events but this would make the
-    // logic of the event handlers more complicated: you'd need to test for the
-    // event object and interpret the coordinates differently according to
-    // whether it's NULL or not so unless somebody really asks for this let's
-    // just avoid the issue.
-    if ( win )
-    {
-        const wxPoint mousePos = win->ScreenToClient(wxGetMousePosition());
-        event.m_x = mousePos.x;
-        event.m_y = mousePos.y;
-    }
 }
 
 } // anonymous namespace
@@ -7226,9 +7205,21 @@ wxWindow* wxFindWindowAtPoint(const wxPoint& pt)
     {
         // WindowFromPoint() ignores the disabled children but we're supposed
         // to take them into account, so check if we have a child at this
-        // coordinate.
-        ::ScreenToClient(hWnd, &pt2);
-        hWnd = ::ChildWindowFromPointEx(hWnd, pt2, CWP_SKIPINVISIBLE);
+        // coordinate using ChildWindowFromPointEx().
+        for ( ;; )
+        {
+            pt2.x = pt.x;
+            pt2.y = pt.y;
+            ::ScreenToClient(hWnd, &pt2);
+            HWND child = ::ChildWindowFromPointEx(hWnd, pt2, CWP_SKIPINVISIBLE);
+            if ( child == hWnd || !child )
+                break;
+
+            // ChildWindowFromPointEx() only examines the immediate children
+            // but we want to get the deepest (top in Z-order) one, so continue
+            // iterating for as long as it finds anything.
+            hWnd = child;
+        }
     }
 
     return wxGetWindowFromHWND((WXHWND)hWnd);

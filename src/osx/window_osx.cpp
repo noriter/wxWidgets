@@ -301,6 +301,11 @@ wxOSXWidgetImpl* wxWindowMac::GetPeer() const
     return m_peer == kOSXNoWidgetImpl ? NULL : m_peer ; 
 }
 
+bool wxWindowMac::ShouldCreatePeer() const
+{
+    return m_peer != kOSXNoWidgetImpl;
+}
+
 void wxWindowMac::DontCreatePeer()
 {
     m_peer = kOSXNoWidgetImpl;
@@ -345,7 +350,11 @@ void wxWindowMac::SetPeer(wxOSXWidgetImpl* peer)
         GetParent()->MacChildAdded() ;
         
         // adjust font, controlsize etc
-        DoSetWindowVariant( m_windowVariant ) ;
+        GetPeer()->SetControlSize( m_windowVariant );
+        InheritAttributes();
+        // in case nothing has been set, use the variant default fonts
+        if ( !m_hasFont )
+            DoSetWindowVariant( m_windowVariant );
         
         GetPeer()->SetLabel( wxStripMenuCodes(m_label, wxStrip_Mnemonics), GetFont().GetEncoding() ) ;
         
@@ -378,7 +387,7 @@ bool wxWindowMac::MacIsUserPane() const
 /*
  * Right now we have the following setup :
  * a border that is not part of the native control is always outside the
- * control's border (otherwise we loose all native intelligence, future ways
+ * control's border (otherwise we lose all native intelligence, future ways
  * may be to have a second embedding control responsible for drawing borders
  * and backgrounds eventually)
  * so all this border calculations have to be taken into account when calling
@@ -484,39 +493,6 @@ void wxWindowMac::DoSetWindowVariant( wxWindowVariant variant )
         return;
 
     GetPeer()->SetControlSize( variant );
-#if wxOSX_USE_CARBON
-    ControlSize size ;
-
-    // we will get that from the settings later
-    // and make this NORMAL later, but first
-    // we have a few calculations that we must fix
-
-    switch ( variant )
-    {
-        case wxWINDOW_VARIANT_NORMAL :
-            size = kControlSizeNormal;
-            break ;
-
-        case wxWINDOW_VARIANT_SMALL :
-            size = kControlSizeSmall;
-            break ;
-
-        case wxWINDOW_VARIANT_MINI :
-            // not always defined in the headers
-            size = 3 ;
-            break ;
-
-        case wxWINDOW_VARIANT_LARGE :
-            size = kControlSizeLarge;
-            break ;
-
-        default:
-            wxFAIL_MSG(wxT("unexpected window variant"));
-            break ;
-    }
-    GetPeer()->SetData<ControlSize>(kControlEntireControl, kControlSizeTag, &size ) ;
-#endif
-
 
     switch ( variant )
     {
@@ -628,6 +604,25 @@ void wxWindowMac::SetFocus()
         return ;
 
     GetPeer()->SetFocus() ;
+}
+
+void wxWindowMac::OSXSimulateFocusEvents()
+{
+    wxWindow* former = FindFocus() ;
+    if ( former != NULL && former != this )
+    {
+        {
+            wxFocusEvent event( wxEVT_KILL_FOCUS, former->GetId());
+            event.SetEventObject(former);
+            former->HandleWindowEvent(event) ;
+        }
+
+        {
+            wxFocusEvent event(wxEVT_SET_FOCUS, former->GetId());
+            event.SetEventObject(former);
+            former->HandleWindowEvent(event);
+        }
+    }
 }
 
 void wxWindowMac::DoCaptureMouse()
@@ -1390,27 +1385,23 @@ void wxWindowMac::Refresh(bool WXUNUSED(eraseBack), const wxRect *rect)
 
     if ( !IsShownOnScreen() )
         return ;
+    
+    if ( IsFrozen() )
+        return;
 
     GetPeer()->SetNeedsDisplay( rect ) ;
 }
 
 void wxWindowMac::DoFreeze()
 {
-#if wxOSX_USE_CARBON
     if ( GetPeer() && GetPeer()->IsOk() )
         GetPeer()->SetDrawingEnabled( false ) ;
-#endif
 }
 
 void wxWindowMac::DoThaw()
 {
-#if wxOSX_USE_CARBON
     if ( GetPeer() && GetPeer()->IsOk() )
-    {
         GetPeer()->SetDrawingEnabled( true ) ;
-        GetPeer()->InvalidateWithChildren() ;
-    }
-#endif
 }
 
 wxWindow *wxGetActiveWindow()
@@ -2628,20 +2619,18 @@ wxHotKeyHandler(EventHandlerCallRef WXUNUSED(nextHandler),
             unsigned char charCode ;
             UInt32 keyCode ;
             UInt32 modifiers ;
-            Point where ;
             UInt32 when = EventTimeToTicks( GetEventTime( event ) ) ;
 
             GetEventParameter( event, kEventParamKeyMacCharCodes, typeChar, NULL, sizeof(char), NULL, &charCode );
             GetEventParameter( event, kEventParamKeyCode, typeUInt32, NULL, sizeof(UInt32), NULL, &keyCode );
             GetEventParameter( event, kEventParamKeyModifiers, typeUInt32, NULL, sizeof(UInt32), NULL, &modifiers );
-            GetEventParameter( event, kEventParamMouseLocation, typeQDPoint, NULL, sizeof(Point), NULL, &where );
             
             UInt32 keymessage = (keyCode << 8) + charCode;
             
             wxKeyEvent wxevent(wxEVT_HOTKEY);
             wxevent.SetId(hotKeyId.id);
             wxTheApp->MacCreateKeyEvent( wxevent, s_hotkeys[i].window , keymessage , 
-                                        modifiers , when , where.h , where.v , 0 ) ;
+                                        modifiers , when , 0 ) ;
             
             s_hotkeys[i].window->HandleWindowEvent(wxevent);
         }
@@ -2883,4 +2872,8 @@ void wxWidgetImpl::SetNeedsFrame( bool needs )
 bool wxWidgetImpl::NeedsFrame() const
 {
     return m_needsFrame;
+}
+
+void wxWidgetImpl::SetDrawingEnabled(bool WXUNUSED(enabled))
+{
 }

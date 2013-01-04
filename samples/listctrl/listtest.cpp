@@ -137,6 +137,7 @@ BEGIN_EVENT_TABLE(MyFrame, wxFrame)
     EVT_MENU(LIST_SORT, MyFrame::OnSort)
     EVT_MENU(LIST_SET_FG_COL, MyFrame::OnSetFgColour)
     EVT_MENU(LIST_SET_BG_COL, MyFrame::OnSetBgColour)
+    EVT_MENU(LIST_ROW_LINES, MyFrame::OnSetRowLines)
     EVT_MENU(LIST_TOGGLE_MULTI_SEL, MyFrame::OnToggleMultiSel)
     EVT_MENU(LIST_SHOW_COL_INFO, MyFrame::OnShowColInfo)
     EVT_MENU(LIST_SHOW_SEL_INFO, MyFrame::OnShowSelInfo)
@@ -149,6 +150,7 @@ BEGIN_EVENT_TABLE(MyFrame, wxFrame)
     EVT_MENU(LIST_THAW, MyFrame::OnThaw)
     EVT_MENU(LIST_TOGGLE_LINES, MyFrame::OnToggleLines)
     EVT_MENU(LIST_TOGGLE_HEADER, MyFrame::OnToggleHeader)
+    EVT_MENU(LIST_TOGGLE_BELL, MyFrame::OnToggleBell)
 #ifdef __WXOSX__
     EVT_MENU(LIST_MAC_USE_GENERIC, MyFrame::OnToggleMacUseGeneric)
 #endif // __WXOSX__
@@ -159,6 +161,7 @@ BEGIN_EVENT_TABLE(MyFrame, wxFrame)
 
     EVT_UPDATE_UI(LIST_TOGGLE_MULTI_SEL, MyFrame::OnUpdateToggleMultiSel)
     EVT_UPDATE_UI(LIST_TOGGLE_HEADER, MyFrame::OnUpdateToggleHeader)
+    EVT_UPDATE_UI(LIST_ROW_LINES, MyFrame::OnUpdateRowLines)
 END_EVENT_TABLE()
 
 // My frame constructor
@@ -258,10 +261,12 @@ MyFrame::MyFrame(const wxChar *title)
     menuList->Check(LIST_TOGGLE_MULTI_SEL, true);
     menuList->AppendCheckItem(LIST_TOGGLE_HEADER, "Toggle &header\tCtrl-H");
     menuList->Check(LIST_TOGGLE_HEADER, true);
+    menuList->AppendCheckItem(LIST_TOGGLE_BELL, "Toggle &bell on no match");
 
     wxMenu *menuCol = new wxMenu;
     menuCol->Append(LIST_SET_FG_COL, wxT("&Foreground colour..."));
     menuCol->Append(LIST_SET_BG_COL, wxT("&Background colour..."));
+    menuCol->AppendCheckItem(LIST_ROW_LINES, wxT("Alternating colours"));
 
     wxMenuBar *menubar = new wxMenuBar;
     menubar->Append(menuFile, wxT("&File"));
@@ -335,7 +340,7 @@ void MyFrame::OnQuit(wxCommandEvent& WXUNUSED(event))
 void MyFrame::OnAbout(wxCommandEvent& WXUNUSED(event))
 {
     wxMessageDialog dialog(this, wxT("List test sample\nJulian Smart (c) 1997"),
-            wxT("About list test"), wxOK|wxCANCEL);
+            wxT("About list test"));
 
     dialog.ShowModal();
 }
@@ -364,6 +369,11 @@ void MyFrame::OnToggleHeader(wxCommandEvent& event)
     wxLogMessage("%s the header", event.IsChecked() ? "Showing" : "Hiding");
 
     m_listCtrl->ToggleWindowStyle(wxLC_NO_HEADER);
+}
+
+void MyFrame::OnToggleBell(wxCommandEvent& event)
+{
+    m_listCtrl->EnableBellOnNoMatch(event.IsChecked());
 }
 
 #ifdef __WXOSX__
@@ -468,9 +478,15 @@ void MyFrame::RecreateList(long flags, bool withText)
             default:
                 wxFAIL_MSG( wxT("unknown listctrl mode") );
         }
+
+        wxMenuBar* const mb = GetMenuBar();
+        if ( mb )
+            m_listCtrl->EnableBellOnNoMatch(mb->IsChecked(LIST_TOGGLE_BELL));
     }
 
     DoSize();
+
+    GetMenuBar()->Check(LIST_ROW_LINES, false);
 
     m_logWindow->Clear();
 }
@@ -825,6 +841,11 @@ void MyFrame::OnUpdateToggleHeader(wxUpdateUIEvent& event)
     event.Check(!m_listCtrl->HasFlag(wxLC_NO_HEADER));
 }
 
+void MyFrame::OnUpdateRowLines(wxUpdateUIEvent& event)
+{
+    event.Enable(m_listCtrl->HasFlag(wxLC_VIRTUAL));
+}
+
 void MyFrame::OnSetFgColour(wxCommandEvent& WXUNUSED(event))
 {
     m_listCtrl->SetForegroundColour(wxGetColourFromUser(this));
@@ -834,6 +855,12 @@ void MyFrame::OnSetFgColour(wxCommandEvent& WXUNUSED(event))
 void MyFrame::OnSetBgColour(wxCommandEvent& WXUNUSED(event))
 {
     m_listCtrl->SetBackgroundColour(wxGetColourFromUser(this));
+    m_listCtrl->Refresh();
+}
+
+void MyFrame::OnSetRowLines(wxCommandEvent& event)
+{
+    m_listCtrl->EnableAlternateRowColours(event.IsChecked());
     m_listCtrl->Refresh();
 }
 
@@ -1096,6 +1123,13 @@ void MyListCtrl::OnListKeyDown(wxListEvent& event)
 {
     long item;
 
+    if ( !wxGetKeyState(WXK_SHIFT) )
+    {
+        LogEvent(event, wxT("OnListKeyDown"));
+        event.Skip();
+        return;
+    }
+
     switch ( event.GetKeyCode() )
     {
         case 'C': // colorize
@@ -1237,26 +1271,7 @@ void MyListCtrl::OnChar(wxKeyEvent& event)
 {
     wxLogMessage(wxT("Got char event."));
 
-    switch ( event.GetKeyCode() )
-    {
-        case 'n':
-        case 'N':
-        case 'c':
-        case 'C':
-        case 'r':
-        case 'R':
-        case 'u':
-        case 'U':
-        case 'd':
-        case 'D':
-        case 'i':
-        case 'I':
-            // these are the keys we process ourselves
-            break;
-
-        default:
-            event.Skip();
-    }
+    event.Skip();
 }
 
 void MyListCtrl::OnRightClick(wxMouseEvent& event)
@@ -1329,7 +1344,7 @@ wxListItemAttr *MyListCtrl::OnGetItemAttr(long item) const
         return &s_attrHighlight;
     }
 
-    return item % 2 ? NULL : (wxListItemAttr *)&m_attr;
+    return wxListCtrl::OnGetItemAttr(item);
 }
 
 void MyListCtrl::InsertItemInReportView(int i)

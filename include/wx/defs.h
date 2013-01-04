@@ -474,7 +474,7 @@ typedef short int WXTYPE;
     #define wxSTDCALL
 #endif /*  platform */
 
-/*  LINKAGEMODE mode is empty for everyting except OS/2 */
+/*  LINKAGEMODE mode is empty for everything except OS/2 */
 #ifndef LINKAGEMODE
     #define LINKAGEMODE
 #endif /*  LINKAGEMODE */
@@ -584,6 +584,27 @@ typedef short int WXTYPE;
 #endif
 
 /*
+   Macros to suppress and restore gcc warnings, requires g++ >= 4.6 and don't
+   do anything otherwise.
+
+   Example of use:
+
+        wxGCC_WARNING_SUPPRESS(float-equal)
+        inline bool wxIsSameDouble(double x, double y) { return x == y; }
+        wxGCC_WARNING_RESTORE(float-equal)
+ */
+#if wxCHECK_GCC_VERSION(4, 6)
+#   define wxGCC_WARNING_SUPPRESS(x) \
+        _Pragma (wxSTRINGIZE(GCC diagnostic push)) \
+        _Pragma (wxSTRINGIZE(GCC diagnostic ignored wxSTRINGIZE(wxCONCAT(-W,x))))
+#   define wxGCC_WARNING_RESTORE(x) \
+       _Pragma (wxSTRINGIZE(GCC diagnostic pop))
+#else /* gcc < 4.6 or not gcc at all */
+#   define wxGCC_WARNING_SUPPRESS(x)
+#   define wxGCC_WARNING_RESTORE(x)
+#endif
+
+/*
     Combination of the two variants above: should be used for deprecated
     functions which are defined inline and are used by wxWidgets itself.
  */
@@ -673,9 +694,13 @@ typedef short int WXTYPE;
     m(==,x,y,z) m(!=,x,y,z) m(>=,x,y,z) m(<=,x,y,z) m(>,x,y,z) m(<,x,y,z)
 
 /*
-    This is only used with wxDEFINE_COMPARISON_REV: it passes both the normal
-    and the reversed comparison operators to the macro.
+    These are only used with wxDEFINE_COMPARISON_[BY_]REV: they pass both the
+    normal and the reversed comparison operators to the macro.
  */
+#define wxFOR_ALL_COMPARISONS_2_REV(m, x, y) \
+    m(==,x,y,==) m(!=,x,y,!=) m(>=,x,y,<=) \
+    m(<=,x,y,>=) m(>,x,y,<) m(<,x,y,>)
+
 #define wxFOR_ALL_COMPARISONS_3_REV(m, x, y, z) \
     m(==,x,y,z,==) m(!=,x,y,z,!=) m(>=,x,y,z,<=) \
     m(<=,x,y,z,>=) m(>,x,y,z,<) m(<,x,y,z,>)
@@ -687,6 +712,9 @@ typedef short int WXTYPE;
 #define wxDEFINE_COMPARISON_REV(op, T1, T2, cmp, oprev) \
     inline bool operator op(T2 y, T1 x) { return cmp(x, y, oprev); }
 
+#define wxDEFINE_COMPARISON_BY_REV(op, T1, T2, oprev) \
+    inline bool operator op(T1 x, T2 y) { return y oprev x; }
+
 /*
     Define all 6 comparison operators (==, !=, <, <=, >, >=) for the given
     types in the specified order. The implementation is provided by the cmp
@@ -695,6 +723,14 @@ typedef short int WXTYPE;
  */
 #define wxDEFINE_COMPARISONS(T1, T2, cmp) \
     wxFOR_ALL_COMPARISONS_3(wxDEFINE_COMPARISON, T1, T2, cmp)
+
+/*
+    Define all 6 comparison operators (==, !=, <, <=, >, >=) for the given
+    types in the specified order, implemented in terms of existing operators
+    for the reverse order.
+ */
+#define wxDEFINE_COMPARISONS_BY_REV(T1, T2) \
+    wxFOR_ALL_COMPARISONS_2_REV(wxDEFINE_COMPARISON_BY_REV, T1, T2)
 
 /*
     This macro allows to define all 12 comparison operators (6 operators for
@@ -2775,9 +2811,14 @@ typedef int (* LINKAGEMODE wxListIterateFunction)(void *current);
 
 /*  --------------------------------------------------------------------------- */
 /*  macros that enable wxWidgets apps to be compiled in absence of the */
-/*  sytem headers, although some platform specific types are used in the */
+/*  system headers, although some platform specific types are used in the */
 /*  platform specific (implementation) parts of the headers */
 /*  --------------------------------------------------------------------------- */
+
+#ifdef __DARWIN__
+#define DECLARE_WXOSX_OPAQUE_CFREF( name ) typedef struct __##name* name##Ref;
+#define DECLARE_WXOSX_OPAQUE_CONST_CFREF( name ) typedef const struct __##name* name##Ref;
+#endif
 
 #ifdef __WXMAC__
 
@@ -2814,9 +2855,6 @@ typedef void*       WXDisplay;
 typedef const void * CFTypeRef;
 
 /* typedef const struct __CFString * CFStringRef; */
-
-#define DECLARE_WXOSX_OPAQUE_CFREF( name ) typedef struct __##name* name##Ref;
-#define DECLARE_WXOSX_OPAQUE_CONST_CFREF( name ) typedef const struct __##name* name##Ref;
 
 DECLARE_WXOSX_OPAQUE_CONST_CFREF( CFString )
 typedef struct __CFString * CFMutableStringRef;

@@ -72,7 +72,7 @@ const char wxGridNameStr[] = "grid";
 // Required for wxIs... functions
 #include <ctype.h>
 
-WX_DECLARE_HASH_SET_WITH_DECL_PTR(int, ::wxIntegerHash, ::wxIntegerEqual,
+WX_DECLARE_HASH_SET_WITH_DECL_PTR(int, wxIntegerHash, wxIntegerEqual,
                                   wxGridFixedIndicesSet, class WXDLLIMPEXP_ADV);
 
 
@@ -155,6 +155,7 @@ wxDEFINE_EVENT( wxEVT_GRID_SELECT_CELL, wxGridEvent );
 wxDEFINE_EVENT( wxEVT_GRID_EDITOR_SHOWN, wxGridEvent );
 wxDEFINE_EVENT( wxEVT_GRID_EDITOR_HIDDEN, wxGridEvent );
 wxDEFINE_EVENT( wxEVT_GRID_EDITOR_CREATED, wxGridEditorCreatedEvent );
+wxDEFINE_EVENT( wxEVT_GRID_TABBING, wxGridEvent );
 
 // ----------------------------------------------------------------------------
 // private helpers
@@ -2413,6 +2414,8 @@ wxGrid::SetTable(wxGridTableBase *table,
         m_created = true;
     }
 
+    InvalidateBestSize();
+
     return m_created;
 }
 
@@ -2514,6 +2517,8 @@ void wxGrid::Init()
     // now anyhow, so just set the parameters directly
     m_xScrollPixelsPerLine = GRID_SCROLL_LINE_X;
     m_yScrollPixelsPerLine = GRID_SCROLL_LINE_Y;
+
+    m_tabBehaviour = Tab_Stop;
 }
 
 // ----------------------------------------------------------------------------
@@ -2564,13 +2569,19 @@ void wxGrid::InitColWidths()
 
 int wxGrid::GetColWidth(int col) const
 {
-    return m_colWidths.IsEmpty() ? m_defaultColWidth : m_colWidths[col];
+    if ( m_colWidths.IsEmpty() )
+        return m_defaultColWidth;
+
+    // a negative width indicates a hidden column
+    return m_colWidths[col] > 0 ? m_colWidths[col] : 0;
 }
 
 int wxGrid::GetColLeft(int col) const
 {
-    return m_colRights.IsEmpty() ? GetColPos( col ) * m_defaultColWidth
-                                 : m_colRights[col] - m_colWidths[col];
+    if ( m_colRights.IsEmpty() )
+        return GetColPos( col ) * m_defaultColWidth;
+
+    return m_colRights[col] - GetColWidth(col);
 }
 
 int wxGrid::GetColRight(int col) const
@@ -2581,13 +2592,20 @@ int wxGrid::GetColRight(int col) const
 
 int wxGrid::GetRowHeight(int row) const
 {
-    return m_rowHeights.IsEmpty() ? m_defaultRowHeight : m_rowHeights[row];
+    // no custom heights / hidden rows
+    if ( m_rowHeights.IsEmpty() )
+        return m_defaultRowHeight;
+
+    // a negative height indicates a hidden row
+    return m_rowHeights[row] > 0 ? m_rowHeights[row] : 0;
 }
 
 int wxGrid::GetRowTop(int row) const
 {
-    return m_rowBottoms.IsEmpty() ? row * m_defaultRowHeight
-                                  : m_rowBottoms[row] - m_rowHeights[row];
+    if ( m_rowBottoms.IsEmpty() )
+        return row * m_defaultRowHeight;
+
+    return m_rowBottoms[row] - GetRowHeight(row);
 }
 
 int wxGrid::GetRowBottom(int row) const
@@ -2864,7 +2882,6 @@ bool wxGrid::Redimension( wxGridTableMessage& msg )
             if ( !m_colAt.IsEmpty() )
             {
                 //Shift the column IDs
-                int i;
                 for ( i = 0; i < m_numCols - numCols; i++ )
                 {
                     if ( m_colAt[i] >= (int)pos )
@@ -2934,7 +2951,6 @@ bool wxGrid::Redimension( wxGridTableMessage& msg )
                 m_colAt.Add( 0, numCols );
 
                 //Set the new columns' positions
-                int i;
                 for ( i = oldNumCols; i < m_numCols; i++ )
                 {
                     m_colAt[i] = i;
@@ -3054,6 +3070,8 @@ bool wxGrid::Redimension( wxGridTableMessage& msg )
         break;
     }
 
+    InvalidateBestSize();
+
     if (result && !GetBatchCount() )
         m_gridWin->Refresh();
 
@@ -3167,15 +3185,19 @@ wxArrayInt wxGrid::CalcColLabelsExposed( const wxRegion& reg ) const
 
 wxGridCellCoordsArray wxGrid::CalcCellsExposed( const wxRegion& reg ) const
 {
-    wxRegionIterator iter( reg );
     wxRect r;
 
     wxGridCellCoordsArray  cellsExposed;
 
     int left, top, right, bottom;
-    while ( iter )
+    for ( wxRegionIterator iter(reg); iter; ++iter )
     {
         r = iter.GetRect();
+
+        // Skip 0-height cells, they're invisible anyhow, don't waste time
+        // getting their rectangles and so on.
+        if ( !r.GetHeight() )
+            continue;
 
         // TODO: remove this when we can...
         // There is a bug in wxMotif that gives garbage update
@@ -3224,8 +3246,6 @@ wxGridCellCoordsArray wxGrid::CalcCellsExposed( const wxRegion& reg ) const
             for ( size_t n = 0; n < count; n++ )
                 cellsExposed.Add(wxGridCellCoords(row, cols[n]));
         }
-
-        ++iter;
     }
 
     return cellsExposed;
@@ -3516,9 +3536,8 @@ void wxGrid::DoUpdateResizeColWidth(int w)
 
 void wxGrid::ProcessColLabelMouseEvent( wxMouseEvent& event )
 {
-    int x, y;
-    wxPoint pos( event.GetPosition() );
-    CalcUnscrolledPosition( pos.x, pos.y, &x, &y );
+    int x;
+    CalcUnscrolledPosition( event.GetPosition().x, 0, &x, NULL );
 
     int col = XToCol(x);
     if ( event.Dragging() )
@@ -3634,14 +3653,13 @@ void wxGrid::ProcessColLabelMouseEvent( wxMouseEvent& event )
     //
     else if ( event.LeftDown() )
     {
-        int col = XToEdgeOfCol(x);
-        if ( col != wxNOT_FOUND && CanDragColSize(col) )
+        int colEdge = XToEdgeOfCol(x);
+        if ( colEdge != wxNOT_FOUND && CanDragColSize(colEdge) )
         {
             ChangeCursorMode(WXGRID_CURSOR_RESIZE_COL, GetColLabelWindow());
         }
         else // not a request to start resizing
         {
-            col = XToCol(x);
             if ( col >= 0 &&
                  !SendEvent( wxEVT_GRID_LABEL_LEFT_CLICK, -1, col, event ) )
             {
@@ -4400,14 +4418,14 @@ bool wxGrid::DoEndDragResizeLine(const wxGridOperations& oper)
             oper.SelectSize(rect) = oper.Select(size);
 
             int subtractLines = 0;
-            const int lineStart = doper.PosToLine(this, posLineStart);
-            if ( lineStart >= 0 )
+            int line = doper.PosToLine(this, posLineStart);
+            if ( line >= 0 )
             {
                 // ensure that if we have a multi-cell block we redraw all of
                 // it by increasing the refresh area to cover it entirely if a
                 // part of it is affected
                 const int lineEnd = doper.PosToLine(this, posLineEnd, true);
-                for ( int line = lineStart; line < lineEnd; line++ )
+                for ( ; line < lineEnd; line++ )
                 {
                     int cellLines = oper.Select(
                         GetCellSize(oper.MakeCoords(m_dragRowOrCol, line)));
@@ -4922,30 +4940,18 @@ void wxGrid::OnKeyDown( wxKeyEvent& event )
                 break;
 
             case WXK_TAB:
-                if (event.ShiftDown())
                 {
-                    if ( GetGridCursorCol() > 0 )
+                    // send an event to the grid's parents for custom handling
+                    wxGridEvent gridEvt(GetId(), wxEVT_GRID_TABBING, this,
+                                        GetGridCursorRow(), GetGridCursorCol(),
+                                        -1, -1, false, event);
+                    if ( ProcessWindowEvent(gridEvt) )
                     {
-                        MoveCursorLeft( false );
-                    }
-                    else
-                    {
-                        // at left of grid
-                        DisableCellEditControl();
+                        // the event has been handled so no need for more processing
+                        break;
                     }
                 }
-                else
-                {
-                    if ( GetGridCursorCol() < GetNumberCols() - 1 )
-                    {
-                        MoveCursorRight( false );
-                    }
-                    else
-                    {
-                        // at right of grid
-                        DisableCellEditControl();
-                    }
-                }
+                DoGridProcessTab( event );
                 break;
 
             case WXK_HOME:
@@ -5075,6 +5081,69 @@ void wxGrid::OnChar( wxKeyEvent& event )
 
 void wxGrid::OnEraseBackground(wxEraseEvent&)
 {
+}
+
+void wxGrid::DoGridProcessTab(wxKeyboardState& kbdState)
+{
+    const bool isForwardTab = !kbdState.ShiftDown();
+
+    // TAB processing only changes when we are at the borders of the grid, so
+    // let's first handle the common behaviour when we are not at the border.
+    if ( isForwardTab )
+    {
+        if ( GetGridCursorCol() < GetNumberCols() - 1 )
+        {
+            MoveCursorRight( false );
+            return;
+        }
+    }
+    else // going back
+    {
+        if ( GetGridCursorCol() )
+        {
+            MoveCursorLeft( false );
+            return;
+        }
+    }
+
+
+    // We only get here if the cursor is at the border of the grid, apply the
+    // configured behaviour.
+    switch ( m_tabBehaviour )
+    {
+        case Tab_Stop:
+            // Nothing special to do, we remain at the current cell.
+            break;
+
+        case Tab_Wrap:
+            // Go to the beginning of the next or the end of the previous row.
+            if ( isForwardTab )
+            {
+                if ( GetGridCursorRow() < GetNumberRows() - 1 )
+                {
+                    GoToCell( GetGridCursorRow() + 1, 0 );
+                    return;
+                }
+            }
+            else
+            {
+                if ( GetGridCursorRow() > 0 )
+                {
+                    GoToCell( GetGridCursorRow() - 1, GetNumberCols() - 1 );
+                    return;
+                }
+            }
+            break;
+
+        case Tab_Leave:
+            if ( Navigate( isForwardTab ? wxNavigationKeyEvent::IsForward
+                                        : wxNavigationKeyEvent::IsBackward ) )
+                return;
+            break;
+    }
+
+    // If we remain in this cell, stop editing it if we were doing so.
+    DisableCellEditControl();
 }
 
 bool wxGrid::SetCurrentCell( const wxGridCellCoords& coords )
@@ -5493,7 +5562,7 @@ void wxGrid::DrawCell( wxDC& dc, const wxGridCellCoords& coords )
         // implicitly, causing this out-of order render.
 #if !defined(__WXMAC__)
         wxGridCellEditor *editor = attr->GetEditor(this, row, col);
-        editor->PaintBackground(rect, attr);
+        editor->PaintBackground(dc, rect, *attr);
         editor->DecRef();
 #endif
     }
@@ -6500,8 +6569,8 @@ wxGridCellCoords wxGrid::XYToCell(int x, int y) const
 
 // compute row or column from some (unscrolled) coordinate value, using either
 // m_defaultRowHeight/m_defaultColWidth or binary search on array of
-// m_rowBottoms/m_colRights to do it quickly (linear search shouldn't be used
-// for large grids)
+// m_rowBottoms/m_colRights to do it quickly in O(log n) time.
+// NOTE: This may not work correctly for reordered columns.
 int wxGrid::PosToLinePos(int coord,
                          bool clipToMinMax,
                          const wxGridOperations& oper) const
@@ -6529,26 +6598,11 @@ int wxGrid::PosToLinePos(int coord,
     }
 
 
-    // adjust maxPos before starting the binary search
-    if ( maxPos >= numLines )
-    {
-        maxPos = numLines  - 1;
-    }
-    else
-    {
-        if ( coord >= lineEnds[oper.GetLineAt(this, maxPos)])
-        {
-            minPos = maxPos;
-            const int minDist = oper.GetMinimalAcceptableLineSize(this);
-            if ( minDist )
-                maxPos = coord / minDist;
-            else
-                maxPos = numLines - 1;
-        }
-
-        if ( maxPos >= numLines )
-            maxPos = numLines  - 1;
-    }
+    // binary search is quite efficient and we can't really make any assumptions
+    // on where to start here since row and columns could be of size 0 if they are
+    // hidden. While this could be made more efficient, some profiling will be
+    // necessary to determine if it really is a performance bottleneck
+    maxPos = numLines  - 1;
 
     // check if the position is beyond the last column
     const int lineAtMaxPos = oper.GetLineAt(this, maxPos);
@@ -7067,6 +7121,7 @@ void wxGrid::SetRowLabelSize( int width )
         }
 
         m_rowLabelWidth = width;
+        InvalidateBestSize();
         CalcWindowSizes();
         wxScrolledWindow::Refresh( true );
     }
@@ -7096,6 +7151,7 @@ void wxGrid::SetColLabelSize( int height )
         }
 
         m_colLabelHeight = height;
+        InvalidateBestSize();
         CalcWindowSizes();
         wxScrolledWindow::Refresh( true );
     }
@@ -8030,13 +8086,69 @@ void wxGrid::SetDefaultRowSize( int height, bool resizeExistingRows )
     }
 }
 
+namespace
+{
+
+// This is a common part of SetRowSize() and SetColSize() which takes care of
+// updating the height/width of a row/column depending on its current value and
+// the new one.
+//
+// Returns the difference between the new and the old size.
+int UpdateRowOrColSize(int& sizeCurrent, int sizeNew)
+{
+    // On input here sizeCurrent can be negative if it's currently hidden (the
+    // real size is its absolute value then). And sizeNew can be 0 to indicate
+    // that the row/column should be hidden or -1 to indicate that it should be
+    // shown again.
+
+    if ( sizeNew < 0 )
+    {
+        // We're showing back a previously hidden row/column.
+        wxASSERT_MSG( sizeNew == -1, wxS("New size must be positive or -1.") );
+
+        wxASSERT_MSG( sizeCurrent < 0, wxS("May only show back if hidden.") );
+
+        sizeCurrent = -sizeCurrent;
+
+        // This is positive which is correct.
+        return sizeCurrent;
+    }
+    else if ( sizeNew == 0 )
+    {
+        // We're hiding a row/column.
+        wxASSERT_MSG( sizeCurrent > 0, wxS("Can't hide if already hidden.") );
+
+        sizeCurrent = -sizeCurrent;
+
+        // This is negative which is correct.
+        return sizeCurrent;
+    }
+    else // We're just changing the row/column size.
+    {
+        // Here it could have been hidden or not previously.
+        const int sizeOld = sizeCurrent < 0 ? 0 : sizeCurrent;
+
+        sizeCurrent = sizeNew;
+
+        return sizeCurrent - sizeOld;
+    }
+}
+
+} // anonymous namespace
+
 void wxGrid::SetRowSize( int row, int height )
 {
-    wxCHECK_RET( row >= 0 && row < m_numRows, wxT("invalid row index") );
+    // See comment in SetColSize
+    if ( height > 0 && height < GetRowMinimalAcceptableHeight())
+        return;
 
-    // if < 0 then calculate new height from label
-    if ( height < 0 )
+    // The value of -1 is special and means to fit the height to the row label.
+    if ( height == -1 )
     {
+        // As with the columns, ignore attempts to auto-size the hidden rows.
+        if ( GetRowHeight(row) == 0 )
+            return;
+
         long w, h;
         wxArrayString lines;
         wxClientDC dc(m_rowLabelWin);
@@ -8047,9 +8159,12 @@ void wxGrid::SetRowSize( int row, int height )
         height = wxMax(h, GetRowMinimalAcceptableHeight());
     }
 
-    // See comment in SetColSize
-    if ( height > 0 && height < GetRowMinimalAcceptableHeight())
-        return;
+    DoSetRowSize(row, height);
+}
+
+void wxGrid::DoSetRowSize( int row, int height )
+{
+    wxCHECK_RET( row >= 0 && row < m_numRows, wxT("invalid row index") );
 
     if ( m_rowHeights.IsEmpty() )
     {
@@ -8057,14 +8172,16 @@ void wxGrid::SetRowSize( int row, int height )
         InitRowHeights();
     }
 
-    int h = wxMax( 0, height );
-    int diff = h - m_rowHeights[row];
+    const int diff = UpdateRowOrColSize(m_rowHeights[row], height);
+    if ( !diff )
+        return;
 
-    m_rowHeights[row] = h;
     for ( int i = row; i < m_numRows; i++ )
     {
         m_rowBottoms[i] += diff;
     }
+
+    InvalidateBestSize();
 
     if ( !GetBatchCount() )
     {
@@ -8093,11 +8210,23 @@ void wxGrid::SetDefaultColSize( int width, bool resizeExistingCols )
 
 void wxGrid::SetColSize( int col, int width )
 {
-    wxCHECK_RET( col >= 0 && col < m_numCols, wxT("invalid column index") );
+    // we intentionally don't test whether the width is less than
+    // GetColMinimalWidth() here but we do compare it with
+    // GetColMinimalAcceptableWidth() as otherwise things currently break (see
+    // #651) -- and we also always allow the width of 0 as it has the special
+    // sense of hiding the column
+    if ( width > 0 && width < GetColMinimalAcceptableWidth() )
+        return;
 
-    // if < 0 then calculate new width from label
-    if ( width < 0 )
+    // The value of -1 is special and means to fit the width to the column label.
+    if ( width == -1 )
     {
+        // We currently don't support auto-sizing hidden columns. We could, but
+        // it's not clear whether this is really needed and it would make the
+        // code more complex.
+        if ( GetColWidth(col) == 0 )
+            return;
+
         long w, h;
         wxArrayString lines;
         wxClientDC dc(m_colWindow);
@@ -8112,13 +8241,12 @@ void wxGrid::SetColSize( int col, int width )
         width = wxMax(width, GetColMinimalAcceptableWidth());
     }
 
-    // we intentionally don't test whether the width is less than
-    // GetColMinimalWidth() here but we do compare it with
-    // GetColMinimalAcceptableWidth() as otherwise things currently break (see
-    // #651) -- and we also always allow the width of 0 as it has the special
-    // sense of hiding the column
-    if ( width > 0 && width < GetColMinimalAcceptableWidth() )
-        return;
+    DoSetColSize(col, width);
+}
+
+void wxGrid::DoSetColSize( int col, int width )
+{
+    wxCHECK_RET( col >= 0 && col < m_numCols, wxT("invalid column index") );
 
     if ( m_colWidths.IsEmpty() )
     {
@@ -8126,8 +8254,10 @@ void wxGrid::SetColSize( int col, int width )
         InitColWidths();
     }
 
-    const int diff = width - m_colWidths[col];
-    m_colWidths[col] = width;
+    const int diff = UpdateRowOrColSize(m_colWidths[col], width);
+    if ( !diff )
+        return;
+
     if ( m_useNativeHeader )
         GetGridColHeader()->UpdateColumn(col);
     //else: will be refreshed when the header is redrawn
@@ -8136,6 +8266,8 @@ void wxGrid::SetColSize( int col, int width )
     {
         m_colRights[GetColAt(colPos)] += diff;
     }
+
+    InvalidateBestSize();
 
     if ( !GetBatchCount() )
     {
@@ -8213,6 +8345,19 @@ wxGrid::AutoSizeColOrRow(int colOrRow, bool setAsMin, wxGridDirection direction)
 {
     const bool column = direction == wxGRID_COLUMN;
 
+    // We don't support auto-sizing hidden rows or columns, this doesn't seem
+    // to make much sense.
+    if ( column )
+    {
+        if ( GetColWidth(colOrRow) == 0 )
+            return;
+    }
+    else
+    {
+        if ( GetRowHeight(colOrRow) == 0 )
+            return;
+    }
+
     wxClientDC dc(m_gridWin);
 
     // cancel editing of cell
@@ -8239,9 +8384,15 @@ wxGrid::AutoSizeColOrRow(int colOrRow, bool setAsMin, wxGridDirection direction)
     for ( int rowOrCol = 0; rowOrCol < max; rowOrCol++ )
     {
         if ( column )
+        {
             row = rowOrCol;
+            col = colOrRow;
+        }
         else
+        {
+            row = colOrRow;
             col = rowOrCol;
+        }
 
         // we need to account for the cells spanning multiple columns/rows:
         // while they may need a lot of space, they don't need all of it in
@@ -8259,6 +8410,7 @@ wxGrid::AutoSizeColOrRow(int colOrRow, bool setAsMin, wxGridDirection direction)
             GetCellSize(row, col, &numRows, &numCols);
         }
 
+        // get cell ( main cell if CellSpan_Inside ) renderer best size
         wxGridCellAttr *attr = GetCellAttr(row, col);
         wxGridCellRenderer *renderer = attr->GetRenderer(this, row, col);
         if ( renderer )
@@ -8293,12 +8445,12 @@ wxGrid::AutoSizeColOrRow(int colOrRow, bool setAsMin, wxGridDirection direction)
 
     if ( column )
     {
-        dc.GetMultiLineTextExtent( GetColLabelValue(col), &w, &h );
+        dc.GetMultiLineTextExtent( GetColLabelValue(colOrRow), &w, &h );
         if ( GetColLabelTextOrientation() == wxVERTICAL )
             w = h;
     }
     else
-        dc.GetMultiLineTextExtent( GetRowLabelValue(row), &w, &h );
+        dc.GetMultiLineTextExtent( GetRowLabelValue(colOrRow), &w, &h );
 
     extent = column ? w : h;
     if ( extent > extentMax )
@@ -8325,20 +8477,20 @@ wxGrid::AutoSizeColOrRow(int colOrRow, bool setAsMin, wxGridDirection direction)
         // comment in SetColSize() for explanation of why this isn't done
         // in SetColSize().
         if ( !setAsMin )
-            extentMax = wxMax(extentMax, GetColMinimalWidth(col));
+            extentMax = wxMax(extentMax, GetColMinimalWidth(colOrRow));
 
-        SetColSize( col, extentMax );
+        SetColSize( colOrRow, extentMax );
         if ( !GetBatchCount() )
         {
             if ( m_useNativeHeader )
             {
-                GetGridColHeader()->UpdateColumn(col);
+                GetGridColHeader()->UpdateColumn(colOrRow);
             }
             else
             {
                 int cw, ch, dummy;
                 m_gridWin->GetClientSize( &cw, &ch );
-                wxRect rect ( CellToRect( 0, col ) );
+                wxRect rect ( CellToRect( 0, colOrRow ) );
                 rect.y = 0;
                 CalcScrolledPosition(rect.x, 0, &rect.x, &dummy);
                 rect.width = cw - rect.x;
@@ -8353,14 +8505,14 @@ wxGrid::AutoSizeColOrRow(int colOrRow, bool setAsMin, wxGridDirection direction)
         // comment in SetColSize() for explanation of why this isn't done
         // in SetRowSize().
         if ( !setAsMin )
-            extentMax = wxMax(extentMax, GetRowMinimalHeight(row));
+            extentMax = wxMax(extentMax, GetRowMinimalHeight(colOrRow));
 
-        SetRowSize(row, extentMax);
+        SetRowSize(colOrRow, extentMax);
         if ( !GetBatchCount() )
         {
             int cw, ch, dummy;
             m_gridWin->GetClientSize( &cw, &ch );
-            wxRect rect( CellToRect( row, 0 ) );
+            wxRect rect( CellToRect( colOrRow, 0 ) );
             rect.x = 0;
             CalcScrolledPosition(0, rect.y, &dummy, &rect.y);
             rect.width = m_rowLabelWidth;
@@ -8372,9 +8524,9 @@ wxGrid::AutoSizeColOrRow(int colOrRow, bool setAsMin, wxGridDirection direction)
     if ( setAsMin )
     {
         if ( column )
-            SetColMinimalWidth(col, extentMax);
+            SetColMinimalWidth(colOrRow, extentMax);
         else
-            SetRowMinimalHeight(row, extentMax);
+            SetRowMinimalHeight(colOrRow, extentMax);
     }
 }
 
@@ -8497,6 +8649,7 @@ void wxGrid::AutoSizeRowLabelSize( int row )
 
     // autosize row height depending on label text
     SetRowSize(row, -1);
+
     ForceRefresh();
 }
 
@@ -8512,6 +8665,7 @@ void wxGrid::AutoSizeColLabelSize( int col )
 
     // autosize column width depending on label text
     SetColSize(col, -1);
+
     ForceRefresh();
 }
 
@@ -8523,11 +8677,6 @@ wxSize wxGrid::DoGetBestSize() const
     // change the column/row sizes, only calculate them
     wxSize size(self->SetOrCalcColumnSizes(true) - m_rowLabelWidth + m_extraWidth,
                 self->SetOrCalcRowSizes(true) - m_colLabelHeight + m_extraHeight);
-
-    // NOTE: This size should be cached, but first we need to add calls to
-    // InvalidateBestSize everywhere that could change the results of this
-    // calculation.
-    // CacheBestSize(size);
 
     return wxSize(size.x + m_rowLabelWidth, size.y + m_colLabelHeight)
             + GetWindowBorderSize();
@@ -8927,7 +9076,16 @@ int wxGridSizesInfo::GetSize(unsigned pos) const
 {
     wxUnsignedToIntHashMap::const_iterator it = m_customSizes.find(pos);
 
-    return it == m_customSizes.end() ? m_sizeDefault : it->second;
+    // if it's not found return the default
+    if ( it == m_customSizes.end() )
+      return m_sizeDefault;
+
+    // otherwise return 0 if it's hidden, currently there is no way to get
+    // its size before it had been hidden
+    if ( it->second < 0 )
+      return 0;
+
+    return it->second;
 }
 
 // ----------------------------------------------------------------------------

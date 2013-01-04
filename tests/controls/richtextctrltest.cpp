@@ -44,12 +44,7 @@ private:
         WXUISIM_TEST( TextEvent );
         CPPUNIT_TEST( CutCopyPaste );
         CPPUNIT_TEST( UndoRedo );
-        // FIXME: This test is temporarily disabled as it currently fails
-        //        but it should be reenabled and fixed a.s.a.p. after the
-        //        release.
-#if 0
         CPPUNIT_TEST( CaretPosition );
-#endif
         CPPUNIT_TEST( Selection );
         WXUISIM_TEST( Editable );
         CPPUNIT_TEST( Range );
@@ -355,7 +350,7 @@ void RichTextCtrlTestCase::CaretPosition()
     m_rich->AddParagraph("This is paragraph one");
     m_rich->AddParagraph("Paragraph two\n has \nlots of\n lines");
 
-    m_rich->MoveCaret(1);
+    m_rich->SetInsertionPoint(2);
 
     CPPUNIT_ASSERT_EQUAL(1, m_rich->GetCaretPosition());
 

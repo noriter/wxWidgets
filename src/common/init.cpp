@@ -55,6 +55,10 @@
     #endif // wxCrtSetDbgFlag
 #endif // __WINDOWS__
 
+#if wxUSE_UNICODE && defined(__WXOSX__)
+    #include <locale.h>
+#endif
+
 // ----------------------------------------------------------------------------
 // private classes
 // ----------------------------------------------------------------------------
@@ -218,6 +222,18 @@ static void FreeConvertedArgs()
 // initialization which is always done (not customizable) before wxApp creation
 static bool DoCommonPreInit()
 {
+#if wxUSE_UNICODE && defined(__WXOSX__)
+    // In OS X and iOS, wchar_t CRT functions convert to char* and fail under
+    // some locales. The safest fix is to set LC_CTYPE to UTF-8 to ensure that
+    // they can handle any input.
+    //
+    // Note that this must be done for any app, Cocoa or console, whether or
+    // not it uses wxLocale.
+    //
+    // See http://stackoverflow.com/questions/11713745/why-does-the-printf-family-of-functions-care-about-locale
+    setlocale(LC_CTYPE, "UTF-8");
+#endif // wxUSE_UNICODE && defined(__WXOSX__)
+
 #if wxUSE_LOG
     // Reset logging in case we were cleaned up and are being reinitialized.
     wxLog::DoCreateOnDemand();
@@ -394,6 +410,11 @@ static void DoCommonPostCleanup()
     delete wxMessageOutput::Set(NULL);
 
 #if wxUSE_LOG
+    // call this first as it has a side effect: in addition to flushing all
+    // logs for this thread, it also flushes everything logged from other
+    // threads
+    wxLog::FlushActive();
+
     // and now delete the last logger as well
     //
     // we still don't disable log target auto-vivification even if any log

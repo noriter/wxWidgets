@@ -120,6 +120,9 @@ Edit::Edit (wxWindow *parent, wxWindowID id,
     // initialize language
     m_language = NULL;
 
+    // Use all the bits in the style byte as styles, not indicators.
+    SetStyleBits(8);
+    
     // default font for all styles
     SetViewEOL (g_CommonPrefs.displayEOLEnable);
     SetIndentationGuides (g_CommonPrefs.indentGuideEnable);
@@ -530,18 +533,6 @@ bool Edit::LoadFile (const wxString &filename) {
 
     // load file in edit and clear undo
     if (!filename.empty()) m_filename = filename;
-//     wxFile file (m_filename);
-//     if (!file.IsOpened()) return false;
-    ClearAll ();
-//     long lng = file.Length ();
-//     if (lng > 0) {
-//         wxString buf;
-//         wxChar *buff = buf.GetWriteBuf (lng);
-//         file.Read (buff, lng);
-//         buf.UngetWriteBuf ();
-//         InsertText (0, buf);
-//     }
-//     file.Close();
 
     wxStyledTextCtrl::LoadFile(m_filename);
 

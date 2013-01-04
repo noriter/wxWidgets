@@ -23,9 +23,11 @@
          wxGridCellFloatRenderer, wxGridCellNumberRenderer,
          wxGridCellStringRenderer
 */
-class wxGridCellRenderer
+class wxGridCellRenderer : public wxClientDataContainer, public wxRefCounter
 {
 public:
+    wxGridCellRenderer();
+
     /**
         This function must be implemented in derived classes to return a copy
         of itself.
@@ -50,6 +52,12 @@ public:
     */
     virtual wxSize GetBestSize(wxGrid& grid, wxGridCellAttr& attr, wxDC& dc,
                                int row, int col) = 0;
+
+protected:
+    /**
+        The destructor is private because only DecRef() can delete us.
+    */
+    virtual ~wxGridCellRenderer();
 };
 
 /**
@@ -343,7 +351,7 @@ public:
          wxGridCellFloatEditor, wxGridCellNumberEditor,
          wxGridCellTextEditor
 */
-class wxGridCellEditor
+class wxGridCellEditor : public wxClientDataContainer, public wxRefCounter
 {
 public:
     /**
@@ -424,7 +432,7 @@ public:
         Draws the part of the cell not occupied by the control: the base class
         version just fills it with background colour from the attribute.
     */
-    virtual void PaintBackground(const wxRect& rectCell, wxGridCellAttr* attr);
+    virtual void PaintBackground(wxDC& dc, const wxRect& rectCell, wxGridCellAttr& attr);
 
     /**
         Reset the value in the control back to its starting value.
@@ -453,6 +461,11 @@ public:
         called to let the editor do something about that first key if desired.
     */
     virtual void StartingKey(wxKeyEvent& event);
+
+    /**
+       Returns the value currently in the editor control.
+     */
+    virtual wxString GetValue() const = 0;
 
 protected:
 
@@ -716,7 +729,7 @@ protected:
     @library{wxadv}
     @category{grid}
 */
-class wxGridCellAttr
+class wxGridCellAttr : public wxClientDataContainer, public wxRefCounter
 {
 public:
     /**
@@ -912,6 +925,13 @@ public:
         Sets the text colour.
     */
     void SetTextColour(const wxColour& colText);
+
+protected:
+
+    /**
+        The destructor is private because only DecRef() can delete us.
+    */
+    virtual ~wxGridCellAttr();
 };
 
 /**
@@ -1742,6 +1762,53 @@ struct wxGridSizesInfo
 };
 
 
+
+/**
+    Rendering styles supported by wxGrid::Render() method.
+
+    @since 2.9.4
+ */
+enum wxGridRenderStyle
+{
+    /// Draw grid row header labels.
+    wxGRID_DRAW_ROWS_HEADER = 0x001,
+
+    /// Draw grid column header labels.
+    wxGRID_DRAW_COLS_HEADER = 0x002,
+
+    /// Draw grid cell border lines.
+    wxGRID_DRAW_CELL_LINES = 0x004,
+
+    /**
+        Draw a bounding rectangle around the rendered cell area.
+
+        Useful where row or column headers are not drawn or where there is
+        multi row or column cell clipping and therefore no cell border at
+        the rendered outer boundary.
+    */
+    wxGRID_DRAW_BOX_RECT = 0x008,
+
+    /**
+        Draw the grid cell selection highlight if a selection is present.
+
+        At present the highlight colour drawn depends on whether the grid
+        window loses focus before drawing begins.
+    */
+    wxGRID_DRAW_SELECTION = 0x010,
+
+    /**
+        The default render style.
+
+        Includes all except wxGRID_DRAW_SELECTION.
+     */
+    wxGRID_DRAW_DEFAULT = wxGRID_DRAW_ROWS_HEADER |
+                          wxGRID_DRAW_COLS_HEADER |
+                          wxGRID_DRAW_CELL_LINES |
+                          wxGRID_DRAW_BOX_RECT
+};
+
+
+
 /**
     @class wxGrid
 
@@ -1851,47 +1918,26 @@ public:
     };
 
     /**
-        Rendering styles supported by wxGrid::Render() method.
+        Constants defining different support built-in TAB handling behaviours.
 
-        @since 2.9.4
+        The elements of this enum determine what happens when TAB is pressed
+        when the cursor is in the rightmost column (or Shift-TAB is pressed
+        when the cursor is in the leftmost one).
+
+        @see SetTabBehaviour(), @c wxEVT_GRID_TABBING
+
+        @since 2.9.5
      */
-    enum wxGridRenderStyle
+    enum TabBehaviour
     {
-        /// Draw grid row header labels.
-        wxGRID_DRAW_ROWS_HEADER = 0x001,
+        /// Do nothing, this is default.
+        Tab_Stop,
 
-        /// Draw grid column header labels.
-        wxGRID_DRAW_COLS_HEADER = 0x002,
+        /// Move to the beginning of the next (or the end of the previous) row.
+        Tab_Wrap,
 
-        /// Draw grid cell border lines.
-        wxGRID_DRAW_CELL_LINES = 0x004,
-
-        /**
-            Draw a bounding rectangle around the rendered cell area.
-
-            Useful where row or column headers are not drawn or where there is
-            multi row or column cell clipping and therefore no cell border at
-            the rendered outer boundary.
-        */
-        wxGRID_DRAW_BOX_RECT = 0x008,
-
-        /**
-            Draw the grid cell selection highlight if a selection is present.
-
-            At present the highlight colour drawn depends on whether the grid
-            window loses focus before drawing begins.
-        */
-        wxGRID_DRAW_SELECTION = 0x010,
-
-        /**
-            The default render style.
-
-            Includes all except wxGRID_DRAW_SELECTION.
-         */
-        wxGRID_DRAW_DEFAULT = wxGRID_DRAW_ROWS_HEADER |
-                              wxGRID_DRAW_COLS_HEADER |
-                              wxGRID_DRAW_CELL_LINES |
-                              wxGRID_DRAW_BOX_RECT
+        /// Move to the next (or the previous) control after the grid.
+        Tab_Leave
     };
 
     /**
@@ -2811,6 +2857,13 @@ public:
     void AutoSizeRows(bool setAsMin = true);
 
     /**
+        Returns @true if the cell value can overflow.
+
+        A cell can overflow if the next cell in the row is empty.
+    */
+    bool GetCellOverflow(int row, int col) const;
+
+    /**
         Returns the current height of the column labels.
     */
     int GetColLabelSize() const;
@@ -2834,6 +2887,11 @@ public:
         Returns @true if the specified column is not currently hidden.
      */
     bool IsColShown(int col) const;
+
+    /**
+        Returns @true if the cells can overflow by default.
+    */
+    bool GetDefaultCellOverflow() const;
 
     /**
         Returns the default height for column labels.
@@ -2881,6 +2939,11 @@ public:
     bool IsRowShown(int row) const;
 
     /**
+        Sets the overflow permission of the cell.
+    */
+    void SetCellOverflow(int row, int col, bool allow);
+
+    /**
         Sets the height of the column labels.
 
         If @a height equals to @c wxGRID_AUTOSIZE then height is calculated
@@ -2923,7 +2986,10 @@ public:
         Hides the specified column.
 
         To show the column later you need to call SetColSize() with non-0
-        width or ShowCol().
+        width or ShowCol() to restore the previous column width.
+
+        Notice that this method shouldn't be called if the column is already
+        hidden.
 
         @param col
             The column index.
@@ -2933,10 +2999,21 @@ public:
     /**
         Shows the previously hidden column by resizing it to non-0 size.
 
+        The column is shown again with the same width that it had before
+        HideCol() call.
+
+        Notice that this method shouldn't be called if the column is not
+        currently hidden.
+
         @see HideCol(), SetColSize()
      */
     void ShowCol(int col);
 
+
+    /**
+        Sets the default overflow permission of the cells.
+    */
+    void SetDefaultCellOverflow( bool allow );
 
     /**
         Sets the default width for columns in the grid.
@@ -2994,7 +3071,7 @@ public:
         Hides the specified row.
 
         To show the row later you need to call SetRowSize() with non-0
-        width or ShowRow().
+        width or ShowRow() to restore its original height.
 
         @param col
             The row index.
@@ -3002,7 +3079,10 @@ public:
     void HideRow(int col);
 
     /**
-        Shows the previously hidden row by resizing it to non-0 size.
+        Shows the previously hidden row.
+
+        The row is shown again with the same height that it had before
+        HideRow() call.
 
         @see HideRow(), SetRowSize()
      */
@@ -3434,6 +3514,25 @@ public:
         do this.
     */
     void SetGridCursor(const wxGridCellCoords& coords);
+
+    /**
+        Set the grid's behaviour when the user presses the TAB key.
+
+        Pressing the TAB key moves the grid cursor right in the current row, if
+        there is a cell at the right and, similarly, Shift-TAB moves the cursor
+        to the left in the current row if it's not in the first column.
+
+        What happens if the cursor can't be moved because it it's already at
+        the beginning or end of the row can be configured using this function,
+        see wxGrid::TabBehaviour documentation for the detailed description.
+
+        IF none of the standard behaviours is appropriate, you can always
+        handle @c wxEVT_GRID_TABBING event directly to implement a custom
+        TAB-handling logic.
+
+        @since 2.9.5
+    */
+    void SetTabBehaviour(TabBehaviour behaviour);
 
     //@}
 
@@ -4428,6 +4527,12 @@ public:
         and updates the column to indicate the new sort order and refreshes
         itself.
         This event macro corresponds to @c wxEVT_GRID_COL_SORT event type.
+    @event{EVT_GRID_TABBING(func)}
+        This event is generated when the user presses TAB or Shift-TAB in the
+        grid. It can be used to customize the simple default TAB handling
+        logic, e.g. to go to the next non-empty cell instead of just the next
+        cell. See also wxGrid::SetTabBehaviour(). This event is new since
+        wxWidgets 2.9.5.
     @endEventTable
 
     @library{wxadv}

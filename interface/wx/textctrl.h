@@ -179,7 +179,9 @@ enum wxTextAttrBulletStyle
 
     wxTEXT_ATTR_BULLET_STYLE_ALIGN_LEFT      = 0x00000000,
     wxTEXT_ATTR_BULLET_STYLE_ALIGN_RIGHT     = 0x00001000,
-    wxTEXT_ATTR_BULLET_STYLE_ALIGN_CENTRE    = 0x00002000
+    wxTEXT_ATTR_BULLET_STYLE_ALIGN_CENTRE    = 0x00002000,
+
+    wxTEXT_ATTR_BULLET_STYLE_CONTINUATION    = 0x00004000
 };
 
 /**
@@ -1151,7 +1153,7 @@ public:
 
     @library{wxcore}
     @category{ctrl}
-    @appearance{textctrl.png}
+    @appearance{textctrl}
 
     @see wxTextCtrl::Create, wxValidator
 */

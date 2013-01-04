@@ -99,6 +99,19 @@ enum wxScrollbarVisibility
     of (10,-90).
 
     @beginStyleTable
+    @style{wxHSCROLL}
+           If this style is specified and ::wxVSCROLL isn't, the window will be
+           scrollable only in horizontal direction (by default, i.e. if neither
+           this style nor ::wxVSCROLL is specified, it scrolls in both
+           directions).
+    @style{wxVSCROLL}
+           If this style is specified and ::wxHSCROLL isn't, the window will be
+           scrollable only in vertical direction (by default, i.e. if neither
+           this style nor ::wxHSCROLL is specified, it scrolls in both
+           directions).
+    @style{wxALWAYS_SHOW_SB}
+           Since wxWidgets 2.9.5, specifying this style makes the window always
+           show its scrollbars, even if they are not used. See ShowScrollbars().
     @style{wxRETAINED}
            Uses a backing pixmap to speed refreshes. Motif only.
     @endStyleTable
@@ -183,7 +196,6 @@ public:
                long style = wxHSCROLL | wxVSCROLL,
                const wxString& name = "scrolledWindow");
 
-
     /**
         Translates the logical coordinates to the device ones. For example, if
         a window is scrolled 10 pixels to the bottom, the device coordinates of
@@ -199,6 +211,7 @@ public:
         @see CalcUnscrolledPosition()
     */
     void CalcScrolledPosition(int x, int y, int* xx, int* yy) const;
+    wxPoint CalcScrolledPosition(const wxPoint& pt) const;
 
     /**
         Translates the device coordinates to the logical ones. For example, if
@@ -215,6 +228,7 @@ public:
         @see CalcScrolledPosition()
     */
     void CalcUnscrolledPosition(int x, int y, int* xx, int* yy) const;
+    wxPoint CalcUnscrolledPosition(const wxPoint& pt) const;
 
     /**
         Creates the window for two-step construction. Derived classes
@@ -283,21 +297,22 @@ public:
     void DoPrepareDC(wxDC& dc);
 
     /**
-        Enable or disable physical scrolling in the given direction. Physical
-        scrolling is the physical transfer of bits up or down the
-        screen when a scroll event occurs. If the application scrolls by a
-        variable amount (e.g. if there are different font sizes) then physical
-        scrolling will not work, and you should switch it off. Note that you
-        will have to reposition child windows yourself, if physical scrolling
-        is disabled.
+        Enable or disable use of wxWindow::ScrollWindow() for scrolling.
+
+        By default, when a scrolled window is logically scrolled,
+        wxWindow::ScrollWindow() is called on the underlying window which
+        scrolls the window contents and only invalidates the part of the window
+        newly brought into view. If @false is passed as an argument, then this
+        "physical scrolling" is disabled and the window is entirely invalidated
+        whenever it is scrolled by calling wxWindow::Refresh().
+
+        It should be rarely necessary to disable physical scrolling, so this
+        method shouldn't be called in normal circumstances.
 
         @param xScrolling
             If @true, enables physical scrolling in the x direction.
         @param yScrolling
             If @true, enables physical scrolling in the y direction.
-
-        @remarks Physical scrolling may not be available on all platforms. Where
-                 it is available, it is enabled by default.
     */
     void EnableScrolling(bool xScrolling, bool yScrolling);
 

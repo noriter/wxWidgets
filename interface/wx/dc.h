@@ -73,7 +73,7 @@ enum wxMappingMode
     wxMM_TWIPS,
 
     /**
-        Each logical unit is a @e "printer point" i.e. 1/72 of an inch.
+        Each logical unit is a @e "printer point" i.e.\ 1/72 of an inch.
         Equivalent to about 353 micrometers.
     */
     wxMM_POINTS
@@ -1413,7 +1413,7 @@ public:
     bool IsOk() const;
 
     /**
-        Sets the x and y axis orientation (i.e., the direction from lowest to
+        Sets the x and y axis orientation (i.e.\ the direction from lowest to
         highest values on the axis). The default orientation is x axis from
         left to right and y axis from top down.
 
@@ -1427,7 +1427,7 @@ public:
     void SetAxisOrientation(bool xLeftRight, bool yBottomUp);
 
     /**
-        Sets the device origin (i.e., the origin in pixels after scaling has
+        Sets the device origin (i.e.\ the origin in pixels after scaling has
         been applied). This function may be useful in Windows printing
         operations for placing a graphic on a page.
     */
@@ -1533,6 +1533,45 @@ public:
     void ResetTransformMatrix();
 
     //@}
+
+    
+    /**
+        @name query capabilities
+    */
+    //@{
+
+    /**
+       Does the DC support drawing bitmaps?
+    */
+    bool CanDrawBitmap() const;
+
+    /**
+       Does the DC supoprt calculating the size required to draw text?
+    */
+    bool CanGetTextExtent() const;
+    
+    //@}
+
+    /**
+       Returns a value that can be used as a handle to the native drawing
+       context, if this wxDC has something that could be thought of in that
+       way.  (Not all of them do.)
+
+       For example, on Windows the return value is an HDC, on OSX it is a
+       CGContextRef and on wxGTK it will be a GdkDrawable.  If the DC is a
+       wxGCDC then the return value will be the value returned from
+       wxGraphicsContext::GetNativeContext.  A value of NULL is returned if
+       the DC does not have anything that fits the handle concept.
+       
+       @since 2.9.5
+     */
+    void* GetHandle() const;
+
+    
+    /**
+       If supported by the platform and the type of DC, fetch the contents of the DC, or a subset of it, as a bitmap.
+    */
+    wxBitmap GetAsBitmap(const wxRect *subrect = NULL) const;
 
 
     void SetLogicalScale(double x, double y);

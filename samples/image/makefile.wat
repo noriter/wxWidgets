@@ -38,6 +38,10 @@ PORTNAME = base
 !ifeq USE_GUI 1
 PORTNAME = msw
 !endif
+COMPILER_VERSION =
+!ifeq OFFICIAL_BUILD 1
+COMPILER_VERSION = ERROR-COMPILER-VERSION-MUST-BE-SET-FOR-OFFICIAL-BUILD
+!endif
 WXDEBUGFLAG =
 !ifeq BUILD debug
 WXDEBUGFLAG = d
@@ -217,8 +221,9 @@ __DLLFLAG_p = -dWXUSINGDLL
 WX_RELEASE_NODOT = 29
 COMPILER_PREFIX = wat
 OBJS = &
-	$(COMPILER_PREFIX)_$(PORTNAME)$(WXUNIVNAME)$(WXUNICODEFLAG)$(WXDEBUGFLAG)$(WXDLLFLAG)$(CFG)
-LIBDIRNAME = .\..\..\lib\$(COMPILER_PREFIX)_$(LIBTYPE_SUFFIX)$(CFG)
+	$(COMPILER_PREFIX)$(COMPILER_VERSION)_$(PORTNAME)$(WXUNIVNAME)$(WXUNICODEFLAG)$(WXDEBUGFLAG)$(WXDLLFLAG)$(CFG)
+LIBDIRNAME = &
+	.\..\..\lib\$(COMPILER_PREFIX)$(COMPILER_VERSION)_$(LIBTYPE_SUFFIX)$(CFG)
 SETUPHDIR = &
 	$(LIBDIRNAME)\$(PORTNAME)$(WXUNIVNAME)$(WXUNICODEFLAG)$(WXDEBUGFLAG)
 IMAGE_CXXFLAGS = $(__DEBUGINFO_0) $(__OPTIMIZEFLAG_2) $(__THREADSFLAG_5) &
@@ -249,7 +254,7 @@ clean : .SYMBOLIC
 	-if exist $(OBJS)\*.pch del $(OBJS)\*.pch
 	-if exist $(OBJS)\image.exe del $(OBJS)\image.exe
 
-$(OBJS)\image.exe :  $(IMAGE_OBJECTS) $(OBJS)\image_sample.res
+$(OBJS)\image.exe :  $(IMAGE_OBJECTS) $(OBJS)\image_image.res
 	@%create $(OBJS)\image.lbc
 	@%append $(OBJS)\image.lbc option quiet
 	@%append $(OBJS)\image.lbc name $^@
@@ -257,7 +262,7 @@ $(OBJS)\image.exe :  $(IMAGE_OBJECTS) $(OBJS)\image_sample.res
 	@%append $(OBJS)\image.lbc  $(__DEBUGINFO_1)  libpath $(LIBDIRNAME) system nt_win ref '_WinMain@16' $(____CAIRO_LIBDIR_FILENAMES_p) $(LDFLAGS)
 	@for %i in ($(IMAGE_OBJECTS)) do @%append $(OBJS)\image.lbc file %i
 	@for %i in ( $(__WXLIB_CORE_p)  $(__WXLIB_BASE_p)  $(__WXLIB_MONO_p) $(__LIB_TIFF_p) $(__LIB_JPEG_p) $(__LIB_PNG_p)  wxzlib$(WXDEBUGFLAG).lib wxregex$(WXUNICODEFLAG)$(WXDEBUGFLAG).lib wxexpat$(WXDEBUGFLAG).lib $(EXTRALIBS_FOR_BASE)  $(__CAIRO_LIB_p) kernel32.lib user32.lib gdi32.lib comdlg32.lib winspool.lib winmm.lib shell32.lib comctl32.lib ole32.lib oleaut32.lib uuid.lib rpcrt4.lib advapi32.lib wsock32.lib wininet.lib) do @%append $(OBJS)\image.lbc library %i
-	@%append $(OBJS)\image.lbc option resource=$(OBJS)\image_sample.res
+	@%append $(OBJS)\image.lbc option resource=$(OBJS)\image_image.res
 	@for %i in () do @%append $(OBJS)\image.lbc option stack=%i
 	wlink @$(OBJS)\image.lbc
 
@@ -265,12 +270,11 @@ data : .SYMBOLIC
 	if not exist $(OBJS) mkdir $(OBJS)
 	for %f in (horse.png horse.jpg horse.bmp horse.gif horse.pcx horse.pnm horse_ag.pnm horse_rg.pnm horse.tif horse.tga horse.xpm horse.cur horse.ico horse3.ani smile.xbm toucan.png cmyk.jpg cursor.png) do if not exist $(OBJS)\%f copy .\%f $(OBJS)
 
-$(OBJS)\image_sample.res :  .AUTODEPEND .\..\..\samples\sample.rc
-	wrc -q -ad -bt=nt -r -fo=$^@    -d__WXMSW__ $(__WXUNIV_DEFINE_p) $(__DEBUG_DEFINE_p) $(__NDEBUG_DEFINE_p) $(__EXCEPTIONS_DEFINE_p) $(__RTTI_DEFINE_p) $(__THREAD_DEFINE_p) $(__UNICODE_DEFINE_p)  -i=$(SETUPHDIR) -i=.\..\..\include $(____CAIRO_INCLUDEDIR_FILENAMES) -i=. $(__DLLFLAG_p) -i=.\..\..\samples -dNOPCH $<
-
 $(OBJS)\image_image.obj :  .AUTODEPEND .\image.cpp
 	$(CXX) -bt=nt -zq -fo=$^@ $(IMAGE_CXXFLAGS) $<
 
 $(OBJS)\image_canvas.obj :  .AUTODEPEND .\canvas.cpp
 	$(CXX) -bt=nt -zq -fo=$^@ $(IMAGE_CXXFLAGS) $<
 
+$(OBJS)\image_image.res :  .AUTODEPEND .\image.rc
+	wrc -q -ad -bt=nt -r -fo=$^@    -d__WXMSW__ $(__WXUNIV_DEFINE_p) $(__DEBUG_DEFINE_p) $(__NDEBUG_DEFINE_p) $(__EXCEPTIONS_DEFINE_p) $(__RTTI_DEFINE_p) $(__THREAD_DEFINE_p) $(__UNICODE_DEFINE_p)  -i=$(SETUPHDIR) -i=.\..\..\include $(____CAIRO_INCLUDEDIR_FILENAMES) -i=. $(__DLLFLAG_p) -i=.\..\..\samples -dNOPCH $<

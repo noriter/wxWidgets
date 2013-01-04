@@ -27,13 +27,16 @@
 #endif
 
 #include "wx/artprov.h"
+#include "wx/cmdline.h"
 #include "wx/notifmsg.h"
 #include "wx/settings.h"
 #include "wx/webview.h"
 #include "wx/webviewarchivehandler.h"
+#include "wx/webviewfshandler.h"
 #include "wx/infobar.h"
 #include "wx/filesys.h"
 #include "wx/fs_arc.h"
+#include "wx/fs_mem.h"
 
 #ifndef wxHAS_IMAGES_IN_RESOURCES
     #include "../sample.xpm"
@@ -60,14 +63,44 @@ WX_DECLARE_HASH_MAP(int, wxSharedPtr<wxWebViewHistoryItem>,
 class WebApp : public wxApp
 {
 public:
+    WebApp() :
+        m_url("http://www.wxwidgets.org")
+    {
+    }
+
     virtual bool OnInit();
+
+#if wxUSE_CMDLINE_PARSER
+    virtual void OnInitCmdLine(wxCmdLineParser& parser)
+    {
+        wxApp::OnInitCmdLine(parser);
+
+        parser.AddParam("URL to open",
+                        wxCMD_LINE_VAL_STRING,
+                        wxCMD_LINE_PARAM_OPTIONAL);
+    }
+
+    virtual bool OnCmdLineParsed(wxCmdLineParser& parser)
+    {
+        if ( !wxApp::OnCmdLineParsed(parser) )
+            return false;
+
+        if ( parser.GetParamCount() )
+            m_url = parser.GetParam(0);
+
+        return true;
+    }
+#endif // wxUSE_CMDLINE_PARSER
+
+private:
+    wxString m_url;
 };
 
 class WebFrame : public wxFrame
 {
 public:
-    WebFrame();
-    ~WebFrame();
+    WebFrame(const wxString& url);
+    virtual ~WebFrame();
 
     void UpdateState();
     void OnIdle(wxIdleEvent& evt);
@@ -96,11 +129,21 @@ public:
     void OnMode(wxCommandEvent& evt);
     void OnZoomLayout(wxCommandEvent& evt);
     void OnHistory(wxCommandEvent& evt);
+    void OnScrollLineUp(wxCommandEvent&) { m_browser->LineUp(); }
+    void OnScrollLineDown(wxCommandEvent&) { m_browser->LineDown(); }
+    void OnScrollPageUp(wxCommandEvent&) { m_browser->PageUp(); }
+    void OnScrollPageDown(wxCommandEvent&) { m_browser->PageDown(); }
     void OnRunScript(wxCommandEvent& evt);
     void OnClearSelection(wxCommandEvent& evt);
     void OnDeleteSelection(wxCommandEvent& evt);
     void OnSelectAll(wxCommandEvent& evt);
     void OnLoadScheme(wxCommandEvent& evt);
+    void OnUseMemoryFS(wxCommandEvent& evt);
+    void OnFind(wxCommandEvent& evt);
+    void OnFindDone(wxCommandEvent& evt);
+    void OnFindText(wxCommandEvent& evt);
+    void OnFindOptions(wxCommandEvent& evt);
+    void OnEnableContextMenu(wxCommandEvent& evt);
 
 private:
     wxTextCtrl* m_url;
@@ -112,6 +155,15 @@ private:
     wxToolBarToolBase* m_toolbar_stop;
     wxToolBarToolBase* m_toolbar_reload;
     wxToolBarToolBase* m_toolbar_tools;
+
+    wxToolBarToolBase* m_find_toolbar_done;
+    wxToolBarToolBase* m_find_toolbar_next;
+    wxToolBarToolBase* m_find_toolbar_previous;
+    wxToolBarToolBase* m_find_toolbar_options;
+    wxMenuItem* m_find_toolbar_wrap;
+    wxMenuItem* m_find_toolbar_highlight;
+    wxMenuItem* m_find_toolbar_matchcase;
+    wxMenuItem* m_find_toolbar_wholeword;
 
     wxMenu* m_tools_menu;
     wxMenu* m_tools_history_menu;
@@ -130,13 +182,23 @@ private:
     wxMenuItem* m_edit_undo;
     wxMenuItem* m_edit_redo;
     wxMenuItem* m_edit_mode;
+    wxMenuItem* m_scroll_line_up;
+    wxMenuItem* m_scroll_line_down;
+    wxMenuItem* m_scroll_page_up;
+    wxMenuItem* m_scroll_page_down;
     wxMenuItem* m_selection_clear;
     wxMenuItem* m_selection_delete;
+    wxMenuItem* m_find;
+    wxMenuItem* m_context_menu;
 
     wxInfoBar *m_info;
     wxStaticText* m_info_text;
+    wxTextCtrl* m_find_ctrl;
+    wxToolBar* m_find_toolbar;
 
     wxMenuHistoryMap m_histMenuItems;
+    wxString m_findText;
+    int m_findFlags, m_findCount;
 };
 
 class SourceViewDialog : public wxDialog
@@ -156,17 +218,36 @@ bool WebApp::OnInit()
     if ( !wxApp::OnInit() )
         return false;
 
-    WebFrame *frame = new WebFrame();
+    //Required for virtual file system archive and memory support
+    wxFileSystem::AddHandler(new wxArchiveFSHandler);
+    wxFileSystem::AddHandler(new wxMemoryFSHandler);
+
+    // Create the memory files
+    wxImage::AddHandler(new wxPNGHandler);
+    wxMemoryFSHandler::AddFile("logo.png", 
+        wxBitmap(wxlogo_xpm), wxBITMAP_TYPE_PNG);
+    wxMemoryFSHandler::AddFile("page1.htm",
+        "<html><head><title>File System Example</title>"
+        "<link rel='stylesheet' type='text/css' href='memory:test.css'>"
+        "</head><body><h1>Page 1</h1>"
+        "<p><img src='memory:logo.png'></p>"
+        "<p>Some text about <a href='memory:page2.htm'>Page 2</a>.</p></body>");
+    wxMemoryFSHandler::AddFile("page2.htm",
+        "<html><head><title>File System Example</title>"
+        "<link rel='stylesheet' type='text/css' href='memory:test.css'>"
+        "</head><body><h1>Page 2</h1>"
+        "<p><a href='memory:page1.htm'>Page 1</a> was better.</p></body>");
+    wxMemoryFSHandler::AddFile("test.css", "h1 {color: red;}");
+
+    WebFrame *frame = new WebFrame(m_url);
     frame->Show();
 
     return true;
 }
 
-WebFrame::WebFrame() : wxFrame(NULL, wxID_ANY, "wxWebView Sample")
+WebFrame::WebFrame(const wxString& url) :
+    wxFrame(NULL, wxID_ANY, "wxWebView Sample")
 {
-    //Required from virtual file system archive support
-    wxFileSystem::AddHandler(new wxArchiveFSHandler);
-
     // set the frame icon
     SetIcon(wxICON(sample));
     SetTitle("wxWebView Sample");
@@ -200,16 +281,59 @@ WebFrame::WebFrame() : wxFrame(NULL, wxID_ANY, "wxWebView Sample")
 
     m_toolbar->Realize();
 
+    // Set find values.
+    m_findFlags = wxWEB_VIEW_FIND_DEFAULT;
+    m_findText = wxEmptyString;
+    m_findCount = 0;
+
+    // Create panel for find toolbar.
+    wxPanel* panel = new wxPanel(this);
+    topsizer->Add(panel, wxSizerFlags().Expand());
+
+    // Create sizer for panel.
+    wxBoxSizer* panel_sizer = new wxBoxSizer(wxVERTICAL);
+    panel->SetSizer(panel_sizer);
+
+    // Create the find toolbar.
+    m_find_toolbar = new wxToolBar(panel, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTB_HORIZONTAL|wxTB_TEXT|wxTB_HORZ_LAYOUT);
+    m_find_toolbar->Hide();
+    panel_sizer->Add(m_find_toolbar, wxSizerFlags().Expand());
+
+    // Create find control.
+    m_find_ctrl = new wxTextCtrl(m_find_toolbar, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(140,-1), wxTE_PROCESS_ENTER);
+
+
+    //Find options menu
+    wxMenu* findmenu = new wxMenu;
+    m_find_toolbar_wrap = findmenu->AppendCheckItem(wxID_ANY,"Wrap");
+    m_find_toolbar_matchcase = findmenu->AppendCheckItem(wxID_ANY,"Match Case");
+    m_find_toolbar_wholeword = findmenu->AppendCheckItem(wxID_ANY,"Entire Word");
+    m_find_toolbar_highlight = findmenu->AppendCheckItem(wxID_ANY,"Highlight");
+    // Add find toolbar tools.
+    m_find_toolbar->SetToolSeparation(7);
+    m_find_toolbar_done = m_find_toolbar->AddTool(wxID_ANY, "Close", wxArtProvider::GetBitmap(wxART_CROSS_MARK));
+    m_find_toolbar->AddSeparator();
+    m_find_toolbar->AddControl(m_find_ctrl, "Find");
+    m_find_toolbar->AddSeparator();
+    m_find_toolbar_next = m_find_toolbar->AddTool(wxID_ANY, "Next", wxArtProvider::GetBitmap(wxART_GO_DOWN, wxART_TOOLBAR, wxSize(16,16)));
+    m_find_toolbar_previous = m_find_toolbar->AddTool(wxID_ANY, "Previous", wxArtProvider::GetBitmap(wxART_GO_UP, wxART_TOOLBAR, wxSize(16,16)));
+    m_find_toolbar->AddSeparator();
+    m_find_toolbar_options = m_find_toolbar->AddTool(wxID_ANY, "Options", wxArtProvider::GetBitmap(wxART_PLUS, wxART_TOOLBAR, wxSize(16,16)), "", wxITEM_DROPDOWN);
+    m_find_toolbar_options->SetDropdownMenu(findmenu);
+    m_find_toolbar->Realize();
+
     // Create the info panel
     m_info = new wxInfoBar(this);
     topsizer->Add(m_info, wxSizerFlags().Expand());
 
     // Create the webview
-    m_browser = wxWebView::New(this, wxID_ANY, "http://www.wxwidgets.org");
+    m_browser = wxWebView::New(this, wxID_ANY, url);
     topsizer->Add(m_browser, wxSizerFlags().Expand().Proportion(1));
 
     //We register the wxfs:// protocol for testing purposes
     m_browser->RegisterHandler(wxSharedPtr<wxWebViewHandler>(new wxWebViewArchiveHandler("wxfs")));
+    //And the memory: file system
+    m_browser->RegisterHandler(wxSharedPtr<wxWebViewHandler>(new wxWebViewFSHandler("memory")));
 
     SetSizer(topsizer);
 
@@ -235,6 +359,10 @@ WebFrame::WebFrame() : wxFrame(NULL, wxID_ANY, "wxWebView Sample")
     m_tools_handle_new_window = m_tools_menu->AppendCheckItem(wxID_ANY, _("Handle New Windows"));
     m_tools_menu->AppendSeparator();
 
+    //Find
+    m_find = m_tools_menu->Append(wxID_ANY, _("Find"));
+    m_tools_menu->AppendSeparator();
+
     //History menu
     m_tools_history_menu = new wxMenu();
     wxMenuItem* clearhist =  m_tools_history_menu->Append(wxID_ANY, _("Clear History"));
@@ -257,6 +385,13 @@ WebFrame::WebFrame() : wxFrame(NULL, wxID_ANY, "wxWebView Sample")
     m_tools_menu->AppendSeparator();
     m_tools_menu->AppendSubMenu(editmenu, "Edit");
 
+    wxMenu* scroll_menu = new wxMenu;
+    m_scroll_line_up = scroll_menu->Append(wxID_ANY, "Line &up");
+    m_scroll_line_down = scroll_menu->Append(wxID_ANY, "Line &down");
+    m_scroll_page_up = scroll_menu->Append(wxID_ANY, "Page u&p");
+    m_scroll_page_down = scroll_menu->Append(wxID_ANY, "Page d&own");
+    m_tools_menu->AppendSubMenu(scroll_menu, "Scroll");
+
     wxMenuItem* script =  m_tools_menu->Append(wxID_ANY, _("Run Script"));
 
     //Selection menu
@@ -268,6 +403,9 @@ WebFrame::WebFrame() : wxFrame(NULL, wxID_ANY, "wxWebView Sample")
     editmenu->AppendSubMenu(selection, "Selection");
 
     wxMenuItem* loadscheme =  m_tools_menu->Append(wxID_ANY, _("Custom Scheme Example"));
+    wxMenuItem* usememoryfs =  m_tools_menu->Append(wxID_ANY, _("Memory File System Example"));
+
+    m_context_menu = m_tools_menu->AppendCheckItem(wxID_ANY, _("Enable Context Menu"));
 
     //By default we want to handle navigation and new windows
     m_tools_handle_navigation->Check();
@@ -291,6 +429,20 @@ WebFrame::WebFrame() : wxFrame(NULL, wxID_ANY, "wxWebView Sample")
 
     Connect(m_url->GetId(), wxEVT_COMMAND_TEXT_ENTER,
             wxCommandEventHandler(WebFrame::OnUrl), NULL, this );
+
+    // Connect find toolbar events.
+    Connect(m_find_toolbar_done->GetId(), wxEVT_COMMAND_TOOL_CLICKED,
+            wxCommandEventHandler(WebFrame::OnFindDone), NULL, this );
+    Connect(m_find_toolbar_next->GetId(), wxEVT_COMMAND_TOOL_CLICKED,
+            wxCommandEventHandler(WebFrame::OnFindText), NULL, this );
+    Connect(m_find_toolbar_previous->GetId(), wxEVT_COMMAND_TOOL_CLICKED,
+            wxCommandEventHandler(WebFrame::OnFindText), NULL, this );
+
+    // Connect find control events.
+    Connect(m_find_ctrl->GetId(), wxEVT_COMMAND_TEXT_UPDATED,
+            wxCommandEventHandler(WebFrame::OnFindText), NULL, this );
+    Connect(m_find_ctrl->GetId(), wxEVT_COMMAND_TEXT_ENTER,
+            wxCommandEventHandler(WebFrame::OnFindText), NULL, this );
 
     // Connect the webview events
     Connect(m_browser->GetId(), wxEVT_COMMAND_WEB_VIEW_NAVIGATING,
@@ -339,6 +491,14 @@ WebFrame::WebFrame() : wxFrame(NULL, wxID_ANY, "wxWebView Sample")
             wxCommandEventHandler(WebFrame::OnRedo),  NULL, this );
     Connect(m_edit_mode->GetId(), wxEVT_COMMAND_MENU_SELECTED,
             wxCommandEventHandler(WebFrame::OnMode),  NULL, this );
+    Connect(m_scroll_line_up->GetId(), wxEVT_COMMAND_MENU_SELECTED,
+            wxCommandEventHandler(WebFrame::OnScrollLineUp),  NULL, this );
+    Connect(m_scroll_line_down->GetId(), wxEVT_COMMAND_MENU_SELECTED,
+            wxCommandEventHandler(WebFrame::OnScrollLineDown),  NULL, this );
+    Connect(m_scroll_page_up->GetId(), wxEVT_COMMAND_MENU_SELECTED,
+            wxCommandEventHandler(WebFrame::OnScrollPageUp),  NULL, this );
+    Connect(m_scroll_page_down->GetId(), wxEVT_COMMAND_MENU_SELECTED,
+            wxCommandEventHandler(WebFrame::OnScrollPageDown),  NULL, this );
     Connect(script->GetId(), wxEVT_COMMAND_MENU_SELECTED,
             wxCommandEventHandler(WebFrame::OnRunScript),  NULL, this );
     Connect(m_selection_clear->GetId(), wxEVT_COMMAND_MENU_SELECTED,
@@ -349,6 +509,12 @@ WebFrame::WebFrame() : wxFrame(NULL, wxID_ANY, "wxWebView Sample")
             wxCommandEventHandler(WebFrame::OnSelectAll),  NULL, this );
     Connect(loadscheme->GetId(), wxEVT_COMMAND_MENU_SELECTED,
             wxCommandEventHandler(WebFrame::OnLoadScheme),  NULL, this );
+    Connect(usememoryfs->GetId(), wxEVT_COMMAND_MENU_SELECTED,
+            wxCommandEventHandler(WebFrame::OnUseMemoryFS),  NULL, this );
+    Connect(m_find->GetId(), wxEVT_COMMAND_MENU_SELECTED,
+            wxCommandEventHandler(WebFrame::OnFind),  NULL, this );
+    Connect(m_context_menu->GetId(), wxEVT_COMMAND_MENU_SELECTED,
+            wxCommandEventHandler(WebFrame::OnEnableContextMenu), NULL, this );
 
     //Connect the idle events
     Connect(wxID_ANY, wxEVT_IDLE, wxIdleEventHandler(WebFrame::OnIdle), NULL, this);
@@ -494,6 +660,82 @@ void WebFrame::OnLoadScheme(wxCommandEvent& WXUNUSED(evt))
     m_browser->LoadURL(path);
 }
 
+void WebFrame::OnUseMemoryFS(wxCommandEvent& WXUNUSED(evt))
+{
+    m_browser->LoadURL("memory:page1.htm");
+}
+
+void WebFrame::OnEnableContextMenu(wxCommandEvent& evt)
+{
+    m_browser->EnableContextMenu(evt.IsChecked());
+}
+
+void WebFrame::OnFind(wxCommandEvent& WXUNUSED(evt))
+{
+    wxString value = m_browser->GetSelectedText();
+    if(value.Len() > 150)
+    {
+        value.Truncate(150);
+    }
+    m_find_ctrl->SetValue(value);
+    if(!m_find_toolbar->IsShown()){
+        m_find_toolbar->Show(true);
+        SendSizeEvent();
+    }
+    m_find_ctrl->SelectAll();
+}
+
+void WebFrame::OnFindDone(wxCommandEvent& WXUNUSED(evt))
+{
+    m_browser->Find("");
+    m_find_toolbar->Show(false);
+    SendSizeEvent();
+}
+
+void WebFrame::OnFindText(wxCommandEvent& evt)
+{
+    int flags = 0;
+
+    if(m_find_toolbar_wrap->IsChecked())
+        flags |= wxWEB_VIEW_FIND_WRAP;
+    if(m_find_toolbar_wholeword->IsChecked())
+        flags |= wxWEB_VIEW_FIND_ENTIRE_WORD;
+    if(m_find_toolbar_matchcase->IsChecked())
+        flags |= wxWEB_VIEW_FIND_MATCH_CASE;
+    if(m_find_toolbar_highlight->IsChecked())
+        flags |= wxWEB_VIEW_FIND_HIGHLIGHT_RESULT;
+
+    if(m_find_toolbar_previous->GetId() == evt.GetId())
+        flags |= wxWEB_VIEW_FIND_BACKWARDS;
+
+    wxString find_text = m_find_ctrl->GetValue();
+    long count = m_browser->Find(find_text, flags);
+
+    if(m_findText != find_text)
+    {
+        m_findCount = count;
+        m_findText = find_text;
+    }
+
+    if(count != wxNOT_FOUND || find_text.IsEmpty())
+    {
+        m_find_ctrl->SetBackgroundColour(*wxWHITE);
+    }
+    else
+    {
+        m_find_ctrl->SetBackgroundColour(wxColour(255, 101, 101));
+    }
+
+    m_find_ctrl->Refresh();
+
+    //Log the result, note that count is zero indexed.
+    if(count != m_findCount)
+    {
+        count++;
+    }
+    wxLogMessage("Searching for:%s  current match:%i/%i", m_findText.c_str(), count, m_findCount);
+}
+
 /**
   * Callback invoked when there is a request to load a new page (for instance
   * when the user clicks a link)
@@ -619,6 +861,8 @@ void WebFrame::OnToolsClicked(wxCommandEvent& WXUNUSED(evt))
     m_selection_clear->Enable(m_browser->HasSelection());
     m_selection_delete->Enable(m_browser->HasSelection());
 
+    m_context_menu->Check(m_browser->IsContextMenuEnabled());
+
     //Firstly we clear the existing menu items, then we add the current ones
     wxMenuHistoryMap::const_iterator it;
     for( it = m_histMenuItems.begin(); it != m_histMenuItems.end(); ++it )
@@ -641,7 +885,10 @@ void WebFrame::OnToolsClicked(wxCommandEvent& WXUNUSED(evt))
                 wxCommandEventHandler(WebFrame::OnHistory), NULL, this );
     }
 
-    item = m_tools_history_menu->AppendRadioItem(wxID_ANY, m_browser->GetCurrentTitle());
+    wxString title = m_browser->GetCurrentTitle();
+    if ( title.empty() )
+        title = "(untitled)";
+    item = m_tools_history_menu->AppendRadioItem(wxID_ANY, title);
     item->Check();
 
     //No need to connect the current item
@@ -731,48 +978,30 @@ void WebFrame::OnSelectAll(wxCommandEvent& WXUNUSED(evt))
   * Callback invoked when a loading error occurs
   */
 void WebFrame::OnError(wxWebViewEvent& evt)
-{
-    wxString errorCategory;
+{   
+#define WX_ERROR_CASE(type) \
+    case type: \
+        category = #type; \
+        break;
+
+    wxString category;
     switch (evt.GetInt())
     {
-    case  wxWEB_NAV_ERR_CONNECTION:
-        errorCategory = "wxWEB_NAV_ERR_CONNECTION";
-        break;
-
-    case wxWEB_NAV_ERR_CERTIFICATE:
-        errorCategory = "wxWEB_NAV_ERR_CERTIFICATE";
-        break;
-
-    case wxWEB_NAV_ERR_AUTH:
-        errorCategory = "wxWEB_NAV_ERR_AUTH";
-        break;
-
-    case wxWEB_NAV_ERR_SECURITY:
-        errorCategory = "wxWEB_NAV_ERR_SECURITY";
-        break;
-
-    case wxWEB_NAV_ERR_NOT_FOUND:
-        errorCategory = "wxWEB_NAV_ERR_NOT_FOUND";
-        break;
-
-    case wxWEB_NAV_ERR_REQUEST:
-        errorCategory = "wxWEB_NAV_ERR_REQUEST";
-        break;
-
-    case wxWEB_NAV_ERR_USER_CANCELLED:
-        errorCategory = "wxWEB_NAV_ERR_USER_CANCELLED";
-        break;
-
-    case wxWEB_NAV_ERR_OTHER:
-        errorCategory = "wxWEB_NAV_ERR_OTHER";
-        break;
+        WX_ERROR_CASE(wxWEB_NAV_ERR_CONNECTION);
+        WX_ERROR_CASE(wxWEB_NAV_ERR_CERTIFICATE);
+        WX_ERROR_CASE(wxWEB_NAV_ERR_AUTH);
+        WX_ERROR_CASE(wxWEB_NAV_ERR_SECURITY);
+        WX_ERROR_CASE(wxWEB_NAV_ERR_NOT_FOUND);
+        WX_ERROR_CASE(wxWEB_NAV_ERR_REQUEST);
+        WX_ERROR_CASE(wxWEB_NAV_ERR_USER_CANCELLED);
+        WX_ERROR_CASE(wxWEB_NAV_ERR_OTHER);
     }
 
-    wxLogMessage("%s", "Error; url='" + evt.GetURL() + "', error='" + errorCategory + "' (" + evt.GetString() + ")");
+    wxLogMessage("%s", "Error; url='" + evt.GetURL() + "', error='" + category + " (" + evt.GetString() + ")'");
 
     //Show the info bar with an error
     m_info->ShowMessage(_("An error occurred loading ") + evt.GetURL() + "\n" +
-    "'" + errorCategory + "' (" + evt.GetString() + ")", wxICON_ERROR);
+    "'" + category + "'", wxICON_ERROR);
 
     UpdateState();
 }

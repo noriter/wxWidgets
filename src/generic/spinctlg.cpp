@@ -65,7 +65,11 @@ class wxSpinCtrlTextGeneric : public wxTextCtrl
 public:
     wxSpinCtrlTextGeneric(wxSpinCtrlGenericBase *spin, const wxString& value, long style=0)
         : wxTextCtrl(spin->GetParent(), wxID_ANY, value, wxDefaultPosition, wxDefaultSize,
-                     style & wxALIGN_MASK)
+                     // This is tricky: we want to honour any alignment flags
+                     // but not wxALIGN_CENTER_VERTICAL because it's the same
+                     // as wxTE_PASSWORD and we definitely don't want to show
+                     // asterisks in spin control.
+                     style & (wxALIGN_MASK | wxTE_PROCESS_ENTER) & ~wxTE_PASSWORD)
     {
         m_spin = spin;
 
@@ -84,8 +88,16 @@ public:
 
     void OnChar( wxKeyEvent &event )
     {
-        if (m_spin)
-            m_spin->ProcessWindowEvent(event);
+        if ( !m_spin->ProcessWindowEvent(event) )
+            event.Skip();
+    }
+
+    void OnTextEvent(wxCommandEvent& event)
+    {
+        wxCommandEvent eventCopy(event);
+        eventCopy.SetEventObject(m_spin);
+        eventCopy.SetId(m_spin->GetId());
+        m_spin->ProcessWindowEvent(eventCopy);
     }
 
     void OnKillFocus(wxFocusEvent& event)
@@ -104,6 +116,15 @@ private:
 
 BEGIN_EVENT_TABLE(wxSpinCtrlTextGeneric, wxTextCtrl)
     EVT_CHAR(wxSpinCtrlTextGeneric::OnChar)
+
+    // Forward the text events to wxSpinCtrl itself adjusting them slightly in
+    // the process.
+    EVT_TEXT(wxID_ANY, wxSpinCtrlTextGeneric::OnTextEvent)
+
+    // And we need to forward this one too as wxSpinCtrl is supposed to
+    // generate it if wxTE_PROCESS_ENTER is used with it (and if it isn't,
+    // we're never going to get EVT_TEXT_ENTER in the first place).
+    EVT_TEXT_ENTER(wxID_ANY, wxSpinCtrlTextGeneric::OnTextEvent)
 
     EVT_KILL_FOCUS(wxSpinCtrlTextGeneric::OnKillFocus)
 END_EVENT_TABLE()
@@ -159,7 +180,6 @@ void wxSpinCtrlGenericBase::Init()
     m_max           = 100;
     m_increment     = 1;
     m_snap_to_ticks = false;
-    m_format        = wxS("%g");
 
     m_spin_value    = 0;
 
@@ -207,10 +227,10 @@ bool wxSpinCtrlGenericBase::Create(wxWindow *parent,
     if ( !value.empty() )
     {
         double d;
-        if ( value.ToDouble(&d) )
+        if ( DoTextToValue(value, &d) )
         {
             m_value = d;
-            m_textCtrl->SetValue(wxString::Format(m_format, m_value));
+            m_textCtrl->SetValue(DoValueToText(m_value));
         }
     }
 
@@ -249,16 +269,40 @@ wxSpinCtrlGenericBase::~wxSpinCtrlGenericBase()
     wxDELETE(m_spinButton);
 }
 
+wxWindowList wxSpinCtrlGenericBase::GetCompositeWindowParts() const
+{
+    wxWindowList parts;
+    parts.push_back(m_textCtrl);
+    parts.push_back(m_spinButton);
+    return parts;
+}
+
 // ----------------------------------------------------------------------------
 // geometry
 // ----------------------------------------------------------------------------
 
 wxSize wxSpinCtrlGenericBase::DoGetBestSize() const
 {
-    wxSize sizeBtn  = m_spinButton->GetBestSize(),
-           sizeText = m_textCtrl->GetBestSize();
+    return DoGetSizeFromTextSize(m_textCtrl->GetBestSize().x, -1);
+}
 
-    return wxSize(sizeBtn.x + sizeText.x + MARGIN, sizeText.y);
+wxSize wxSpinCtrlGenericBase::DoGetSizeFromTextSize(int xlen, int ylen) const
+{
+    wxSize sizeBtn  = m_spinButton->GetBestSize();
+    wxSize totalS( m_textCtrl->GetBestSize() );
+
+    wxSize tsize(xlen + sizeBtn.x + MARGIN, totalS.y);
+#if defined(__WXMSW__)
+    tsize.IncBy(0.4 * totalS.y + 4, 0);
+#elif defined(__WXGTK__)
+    tsize.IncBy(totalS.y + 10, 0);
+#endif // MSW GTK
+
+    // Check if the user requested a non-standard height.
+    if ( ylen > 0 )
+        tsize.IncBy(0, ylen - GetCharHeight());
+
+    return tsize;
 }
 
 void wxSpinCtrlGenericBase::DoMoveWindow(int x, int y, int width, int height)
@@ -448,7 +492,7 @@ bool wxSpinCtrlGenericBase::SyncSpinToText()
         return false;
 
     double textValue;
-    if ( m_textCtrl->GetValue().ToDouble(&textValue) )
+    if ( DoTextToValue(m_textCtrl->GetValue(), &textValue) )
     {
         if (textValue > m_max)
             textValue = m_max;
@@ -476,15 +520,14 @@ void wxSpinCtrlGenericBase::SetValue(const wxString& text)
     wxCHECK_RET( m_textCtrl, wxT("invalid call to wxSpinCtrl::SetValue") );
 
     double val;
-    if ( text.ToDouble(&val) && InRange(val) )
+    if ( DoTextToValue(text, &val) && InRange(val) )
     {
         DoSetValue(val);
     }
     else // not a number at all or out of range
     {
         m_textCtrl->SetValue(text);
-        m_textCtrl->SetSelection(0, -1);
-        m_textCtrl->SetInsertionPointEnd();
+        m_textCtrl->SelectAll();
     }
 }
 
@@ -508,14 +551,14 @@ bool wxSpinCtrlGenericBase::DoSetValue(double val)
         }
     }
 
-    wxString str(wxString::Format(m_format.c_str(), val));
+    wxString str(DoValueToText(val));
 
     if ((val != m_value) || (str != m_textCtrl->GetValue()))
     {
-        m_value = val;
-        str.ToDouble( &m_value );    // wysiwyg for textctrl
+        if ( !DoTextToValue(str, &m_value ) )    // wysiwyg for textctrl
+            m_value = val;
         m_textCtrl->SetValue( str );
-        m_textCtrl->SetInsertionPointEnd();
+        m_textCtrl->SelectAll();
         m_textCtrl->DiscardEdits();
         return true;
     }
@@ -563,6 +606,30 @@ void wxSpinCtrlGenericBase::SetSelection(long from, long to)
 // wxSpinCtrl
 //-----------------------------------------------------------------------------
 
+bool wxSpinCtrl::SetBase(int base)
+{
+    // Currently we only support base 10 and 16. We could add support for base
+    // 8 quite easily but wxMSW doesn't support it natively so don't bother.
+    if ( base != 10 && base != 16 )
+        return false;
+
+    if ( base == m_base )
+        return true;
+
+    // Update the current control contents to show in the new base: be careful
+    // to call DoTextToValue() before changing the base...
+    double val;
+    const bool hasValidVal = DoTextToValue(m_textCtrl->GetValue(), &val);
+
+    m_base = base;
+
+    // ... but DoValueToText() after doing it.
+    if ( hasValidVal )
+        m_textCtrl->SetValue(DoValueToText(val));
+
+    return true;
+}
+
 void wxSpinCtrl::DoSendEvent()
 {
     wxSpinEvent event( wxEVT_COMMAND_SPINCTRL_UPDATED, GetId());
@@ -570,6 +637,34 @@ void wxSpinCtrl::DoSendEvent()
     event.SetPosition((int)(m_value + 0.5)); // FIXME should be SetValue
     event.SetString(m_textCtrl->GetValue());
     GetEventHandler()->ProcessEvent( event );
+}
+
+bool wxSpinCtrl::DoTextToValue(const wxString& text, double *val)
+{
+    long lval;
+    if ( !text.ToLong(&lval, GetBase()) )
+        return false;
+
+    *val = static_cast<double>(lval);
+
+    return true;
+}
+
+wxString wxSpinCtrl::DoValueToText(double val)
+{
+    switch ( GetBase() )
+    {
+        case 16:
+            return wxPrivate::wxSpinCtrlFormatAsHex(static_cast<long>(val),
+                                                    GetMax());
+
+        default:
+            wxFAIL_MSG( wxS("Unsupported spin control base") );
+            // Fall through
+
+        case 10:
+            return wxString::Format("%ld", static_cast<long>(val));
+    }
 }
 
 #endif // !wxHAS_NATIVE_SPINCTRL
@@ -587,6 +682,16 @@ void wxSpinCtrlDouble::DoSendEvent()
     event.SetValue(m_value);
     event.SetString(m_textCtrl->GetValue());
     GetEventHandler()->ProcessEvent( event );
+}
+
+bool wxSpinCtrlDouble::DoTextToValue(const wxString& text, double *val)
+{
+    return text.ToDouble(val);
+}
+
+wxString wxSpinCtrlDouble::DoValueToText(double val)
+{
+    return wxString::Format(m_format, val);
 }
 
 void wxSpinCtrlDouble::SetDigits(unsigned digits)

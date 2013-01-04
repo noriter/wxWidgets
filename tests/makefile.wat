@@ -38,6 +38,10 @@ PORTNAME = base
 !ifeq USE_GUI 1
 PORTNAME = msw
 !endif
+COMPILER_VERSION =
+!ifeq OFFICIAL_BUILD 1
+COMPILER_VERSION = ERROR-COMPILER-VERSION-MUST-BE-SET-FOR-OFFICIAL-BUILD
+!endif
 WXDEBUGFLAG =
 !ifeq BUILD debug
 WXDEBUGFLAG = d
@@ -269,8 +273,9 @@ __DLLFLAG_p = -dWXUSINGDLL
 WX_RELEASE_NODOT = 29
 COMPILER_PREFIX = wat
 OBJS = &
-	$(COMPILER_PREFIX)_$(PORTNAME)$(WXUNIVNAME)$(WXUNICODEFLAG)$(WXDEBUGFLAG)$(WXDLLFLAG)$(CFG)
-LIBDIRNAME = .\..\lib\$(COMPILER_PREFIX)_$(LIBTYPE_SUFFIX)$(CFG)
+	$(COMPILER_PREFIX)$(COMPILER_VERSION)_$(PORTNAME)$(WXUNIVNAME)$(WXUNICODEFLAG)$(WXDEBUGFLAG)$(WXDLLFLAG)$(CFG)
+LIBDIRNAME = &
+	.\..\lib\$(COMPILER_PREFIX)$(COMPILER_VERSION)_$(LIBTYPE_SUFFIX)$(CFG)
 SETUPHDIR = &
 	$(LIBDIRNAME)\$(PORTNAME)$(WXUNIVNAME)$(WXUNICODEFLAG)$(WXDEBUGFLAG)
 TEST_CXXFLAGS = $(__DEBUGINFO) $(__OPTIMIZEFLAG) $(__THREADSFLAG) &
@@ -435,6 +440,7 @@ TEST_GUI_OBJECTS =  &
 	$(OBJS)\test_gui_virtlistctrltest.obj &
 	$(OBJS)\test_gui_webtest.obj &
 	$(OBJS)\test_gui_windowtest.obj &
+	$(OBJS)\test_gui_dialogtest.obj &
 	$(OBJS)\test_gui_clone.obj &
 	$(OBJS)\test_gui_propagation.obj &
 	$(OBJS)\test_gui_keyboard.obj &
@@ -947,6 +953,9 @@ $(OBJS)\test_gui_webtest.obj :  .AUTODEPEND .\controls\webtest.cpp
 	$(CXX) -bt=nt -zq -fo=$^@ $(TEST_GUI_CXXFLAGS) $<
 
 $(OBJS)\test_gui_windowtest.obj :  .AUTODEPEND .\controls\windowtest.cpp
+	$(CXX) -bt=nt -zq -fo=$^@ $(TEST_GUI_CXXFLAGS) $<
+
+$(OBJS)\test_gui_dialogtest.obj :  .AUTODEPEND .\controls\dialogtest.cpp
 	$(CXX) -bt=nt -zq -fo=$^@ $(TEST_GUI_CXXFLAGS) $<
 
 $(OBJS)\test_gui_clone.obj :  .AUTODEPEND .\events\clone.cpp

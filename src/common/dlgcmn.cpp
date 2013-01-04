@@ -43,12 +43,15 @@
 #include "wx/bookctrl.h"
 #include "wx/scrolwin.h"
 #include "wx/textwrapper.h"
+#include "wx/testing.h"
 
 #if wxUSE_DISPLAY
 #include "wx/display.h"
 #endif
 
 extern WXDLLEXPORT_DATA(const char) wxDialogNameStr[] = "dialog";
+
+wxModalDialogHook *wxModalDialogHook::ms_instance = NULL;
 
 // ----------------------------------------------------------------------------
 // XTI
@@ -461,14 +464,16 @@ bool wxDialogBase::SendCloseButtonClickEvent()
 
 bool wxDialogBase::IsEscapeKey(const wxKeyEvent& event)
 {
-    // for most platforms, Esc key is used to close the dialogs
-    return event.GetKeyCode() == WXK_ESCAPE &&
-                event.GetModifiers() == wxMOD_NONE;
+    // For most platforms, Esc key is used to close the dialogs.
+    //
+    // Notice that we intentionally don't check for modifiers here, Shift-Esc,
+    // Alt-Esc and so on still close the dialog, typically.
+    return event.GetKeyCode() == WXK_ESCAPE;
 }
 
 void wxDialogBase::OnCharHook(wxKeyEvent& event)
 {
-    if ( event.GetKeyCode() == WXK_ESCAPE )
+    if ( IsEscapeKey(event) )
     {
         if ( SendCloseButtonClickEvent() )
         {

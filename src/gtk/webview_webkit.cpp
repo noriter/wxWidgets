@@ -18,6 +18,7 @@
 #include "wx/gtk/private.h"
 #include "wx/filesys.h"
 #include "wx/base64.h"
+#include "wx/log.h"
 #include <webkit/webkit.h>
 
 // ----------------------------------------------------------------------------
@@ -377,6 +378,23 @@ wxgtk_webview_webkit_resource_req(WebKitWebView *,
     }
 }
 
+#if WEBKIT_CHECK_VERSION(1, 10, 0)
+
+static gboolean
+wxgtk_webview_webkit_context_menu(WebKitWebView *,
+                                  GtkWidget *,
+                                  WebKitHitTestResult *,
+                                  gboolean,
+                                  wxWebViewWebKit *webKitCtrl)
+{
+    if(webKitCtrl->IsContextMenuEnabled())
+        return FALSE;
+    else
+        return TRUE;
+}
+
+#endif
+
 } // extern "C"
 
 //-----------------------------------------------------------------------------
@@ -384,6 +402,11 @@ wxgtk_webview_webkit_resource_req(WebKitWebView *,
 //-----------------------------------------------------------------------------
 
 wxIMPLEMENT_DYNAMIC_CLASS(wxWebViewWebKit, wxWebView);
+
+wxWebViewWebKit::wxWebViewWebKit()
+{
+    m_web_view = NULL;
+}
 
 bool wxWebViewWebKit::Create(wxWindow *parent,
                       wxWindowID id,
@@ -395,6 +418,11 @@ bool wxWebViewWebKit::Create(wxWindow *parent,
 {
     m_busy = false;
     m_guard = false;
+    FindClear();
+
+    // We currently unconditionally impose scrolling in both directions as it's
+    // necessary to show arbitrary pages.
+    style |= wxHSCROLL | wxVSCROLL;
 
     if (!PreCreation( parent, pos, size ) ||
         !CreateBase( parent, id, pos, size, style, wxDefaultValidator, name ))
@@ -403,13 +431,9 @@ bool wxWebViewWebKit::Create(wxWindow *parent,
         return false;
     }
 
-    m_widget = gtk_scrolled_window_new(NULL, NULL);
-    g_object_ref(m_widget);
     m_web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
-
-    /* Place the WebKitWebView in the GtkScrolledWindow */
-    gtk_container_add(GTK_CONTAINER(m_widget), GTK_WIDGET(m_web_view));
-    gtk_widget_show(GTK_WIDGET(m_web_view));
+    GTKCreateScrolledWindowWith(GTK_WIDGET(m_web_view));
+    g_object_ref(m_widget);
 
     g_signal_connect_after(m_web_view, "navigation-policy-decision-requested",
                            G_CALLBACK(wxgtk_webview_webkit_navigation),
@@ -426,6 +450,11 @@ bool wxWebViewWebKit::Create(wxWindow *parent,
 
     g_signal_connect_after(m_web_view, "resource-request-starting",
                            G_CALLBACK(wxgtk_webview_webkit_resource_req), this);
+      
+#if WEBKIT_CHECK_VERSION(1, 10, 0)    
+     g_signal_connect_after(m_web_view, "context-menu",
+                           G_CALLBACK(wxgtk_webview_webkit_context_menu), this);
+#endif
 
     m_parent->DoAddChild( this );
 
@@ -445,6 +474,12 @@ bool wxWebViewWebKit::Create(wxWindow *parent,
                            this);
 
     return true;
+}
+
+wxWebViewWebKit::~wxWebViewWebKit()
+{
+    if (m_web_view)
+        GTKDisconnect(m_web_view);
 }
 
 bool wxWebViewWebKit::Enable( bool enable )
@@ -763,7 +798,7 @@ bool wxWebViewWebKit::CanSetZoomType(wxWebViewZoomType) const
     return true;
 }
 
-void wxWebViewWebKit::SetPage(const wxString& html, const wxString& baseUri)
+void wxWebViewWebKit::DoSetPage(const wxString& html, const wxString& baseUri)
 {
     webkit_web_view_load_string (m_web_view,
                                  html.mb_str(wxConvUTF8),
@@ -913,11 +948,94 @@ void wxWebViewWebKit::RegisterHandler(wxSharedPtr<wxWebViewHandler> handler)
     m_handlerList.push_back(handler);
 }
 
+void wxWebViewWebKit::EnableContextMenu(bool enable)
+{
+#if !WEBKIT_CHECK_VERSION(1, 10, 0) //If we are using an older version
+    g_object_set(webkit_web_view_get_settings(m_web_view), 
+                 "enable-default-context-menu", enable, NULL);
+#endif
+    wxWebView::EnableContextMenu(enable);
+}
+
+long wxWebViewWebKit::Find(const wxString& text, int flags)
+{
+    bool newSearch = false;
+    if(text != m_findText || 
+       (flags & wxWEB_VIEW_FIND_MATCH_CASE) != (m_findFlags & wxWEB_VIEW_FIND_MATCH_CASE))
+    {
+        newSearch = true;
+        //If it is a new search we need to clear existing highlights
+        webkit_web_view_unmark_text_matches(m_web_view);
+        webkit_web_view_set_highlight_text_matches(m_web_view, false);
+    }
+
+    m_findFlags = flags;
+    m_findText = text;
+
+    //If the search string is empty then we clear any selection and highlight
+    if(text == "")
+    {
+        webkit_web_view_unmark_text_matches(m_web_view);
+        webkit_web_view_set_highlight_text_matches(m_web_view, false);
+        ClearSelection();
+        return wxNOT_FOUND;
+    }
+
+    bool wrap = false, matchCase = false, forward = true;
+    if(flags & wxWEB_VIEW_FIND_WRAP)
+        wrap = true;
+    if(flags & wxWEB_VIEW_FIND_MATCH_CASE)
+        matchCase = true;
+    if(flags & wxWEB_VIEW_FIND_BACKWARDS)
+        forward = false;
+
+    if(newSearch)
+    {
+        //Initially we mark the matches to know how many we have
+        m_findCount = webkit_web_view_mark_text_matches(m_web_view, wxGTK_CONV(text), matchCase, 0);
+        //In this case we return early to match IE behaviour
+        m_findPosition = -1;
+        return m_findCount;
+    }
+    else
+    {
+        if(forward)
+            m_findPosition++;
+        else
+            m_findPosition--;
+        if(m_findPosition < 0)
+            m_findPosition += m_findCount;
+        if(m_findPosition > m_findCount)
+            m_findPosition -= m_findCount;
+    }
+
+    //Highlight them if needed
+    bool highlight = flags & wxWEB_VIEW_FIND_HIGHLIGHT_RESULT ? true : false;
+    webkit_web_view_set_highlight_text_matches(m_web_view, highlight);     
+
+    if(!webkit_web_view_search_text(m_web_view, wxGTK_CONV(text), matchCase, forward, wrap))
+    {
+        m_findPosition = -1;
+        ClearSelection();
+        return wxNOT_FOUND;
+    }
+    wxLogMessage(wxString::Format("Returning %d", m_findPosition));
+    return newSearch ? m_findCount : m_findPosition;
+}
+
+void wxWebViewWebKit::FindClear()
+{
+    m_findCount = 0;
+    m_findFlags = 0;
+    m_findText = "";
+    m_findPosition = -1;
+}
+
 // static
 wxVisualAttributes
 wxWebViewWebKit::GetClassDefaultAttributes(wxWindowVariant WXUNUSED(variant))
 {
-     return GetDefaultAttributesFromGTKWidget(webkit_web_view_new);
+     return GetDefaultAttributesFromGTKWidget(webkit_web_view_new());
 }
 
 

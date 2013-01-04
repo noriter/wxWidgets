@@ -99,11 +99,15 @@ WXDWORD wxStaticBox::MSWGetStyle(long style, WXDWORD *exstyle) const
     if ( exstyle )
     {
 #ifndef __WXWINCE__
+        // We may have children inside this static box, so use this style for
+        // TAB navigation to work if we ever use IsDialogMessage() to implement
+        // it (currently we don't because it's too buggy and implement TAB
+        // navigation ourselves, but this could change in the future).
+        *exstyle |= WS_EX_CONTROLPARENT;
+
         if (wxSystemOptions::IsFalse(wxT("msw.staticbox.optimized-paint")))
-            *exstyle = WS_EX_TRANSPARENT;
-        else
+            *exstyle |= WS_EX_TRANSPARENT;
 #endif
-            *exstyle = 0;
     }
 
     styleWin |= BS_GROUPBOX;
@@ -364,6 +368,7 @@ void wxStaticBox::PaintForeground(wxDC& dc, const RECT& rc)
     wxMSWDCImpl *impl = (wxMSWDCImpl*) dc.GetImpl();
     MSWDefWindowProc(WM_PAINT, (WPARAM)GetHdcOf(*impl), 0);
 
+#if wxUSE_UXTHEME
     // when using XP themes, neither setting the text colour nor transparent
     // background mode doesn't change anything: the static box def window proc
     // still draws the label in its own colours, so we need to redraw the text
@@ -485,6 +490,7 @@ void wxStaticBox::PaintForeground(wxDC& dc, const RECT& rc)
                        drawTextFlags | DT_RTLREADING);
         }
     }
+#endif // wxUSE_UXTHEME
 }
 
 void wxStaticBox::OnPaint(wxPaintEvent& WXUNUSED(event))

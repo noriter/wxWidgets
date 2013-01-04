@@ -231,8 +231,6 @@ public:
             The kind of button to add.
         @param help_string
             The UI help string to associate with the new button.
-        @param client_data
-            Client data to associate with the new button.
         
         @return An opaque pointer which can be used only with other button bar
             methods.
@@ -249,8 +247,7 @@ public:
                 const wxBitmap& bitmap_disabled = wxNullBitmap,
                 const wxBitmap& bitmap_small_disabled = wxNullBitmap,
                 wxRibbonButtonKind kind = wxRIBBON_BUTTON_NORMAL,
-                const wxString& help_string = wxEmptyString,
-                wxObject* client_data = NULL);
+                const wxString& help_string = wxEmptyString);
 
     /**
         Inserts a button to the button bar (simple version) at the given position.
@@ -345,8 +342,6 @@ public:
             The kind of button to add.
         @param help_string
             The UI help string to associate with the new button.
-        @param client_data
-            Client data to associate with the new button.
 
         @return An opaque pointer which can be used only with other button bar
             methods.
@@ -367,8 +362,7 @@ public:
                 const wxBitmap& bitmap_disabled = wxNullBitmap,
                 const wxBitmap& bitmap_small_disabled = wxNullBitmap,
                 wxRibbonButtonKind kind = wxRIBBON_BUTTON_NORMAL,
-                const wxString& help_string = wxEmptyString,
-                wxObject* client_data = NULL);
+                const wxString& help_string = wxEmptyString);
 
     /**
         Returns the number of buttons in this button bar.
@@ -376,6 +370,60 @@ public:
         @since 2.9.4
     */
     virtual size_t GetButtonCount() const;
+
+    /**
+        Set the client object associated with a button. The button bar
+        owns the given object and takes care of its deletion.
+        Please, note that you cannot use both client object and client data.
+
+        @since 2.9.5
+    */
+    void SetItemClientObject(wxRibbonButtonBarButtonBase* item, wxClientData* data);
+
+    /**
+        Get the client object associated with a button.
+
+        @since 2.9.5
+    */
+    wxClientData* GetItemClientObject(const wxRibbonButtonBarButtonBase* item) const;
+
+    /**
+        Set the client data associated with a button.
+        Please, note that you cannot use both client object and client data.
+
+        @since 2.9.5
+    */
+    void SetItemClientData(wxRibbonButtonBarButtonBase* item, void* data);
+
+    /**
+        Get the client data associated with a button.
+
+        @since 2.9.5
+    */
+    void* GetItemClientData(const wxRibbonButtonBarButtonBase* item) const;
+
+    /**
+        Returns the N-th button of the bar.
+
+        @see GetButtonCount()
+
+        @since 2.9.5
+    */
+    virtual wxRibbonButtonBarButtonBase *GetItem(size_t n) const;
+
+    /**
+        Returns the first button having a given id or NULL if none matches.
+
+        @since 2.9.5
+    */
+    virtual wxRibbonButtonBarButtonBase *GetItemById(int id) const;
+
+    /**
+        Returns the id of a button.
+
+        @since 2.9.5
+    */
+    virtual int GetItemId(wxRibbonButtonBarButtonBase *) const;
 
     /**
         Calculate button layouts and positions.
@@ -420,6 +468,42 @@ public:
             @false to set it to the untoggled/unpressed/unchecked state.
     */
     virtual void ToggleButton(int button_id, bool checked);
+
+    /**
+        Returns the active item of the button bar or NULL if there is none.
+        The active button is the one being clicked.
+
+        @since 2.9.5
+    */
+    virtual wxRibbonButtonBarButtonBase *GetActiveItem() const;
+
+    /**
+        Returns the hovered item of the button bar or NULL if there is none.
+        The hovered button is the one the mouse is over.
+
+        @since 2.9.5
+    */
+    virtual wxRibbonButtonBarButtonBase *GetHoveredItem() const;
+
+    /**
+        Indicates whether tooltips are shown for disabled buttons.
+
+        By default they are not shown.
+
+        @since 2.9.5
+    */
+    void SetShowToolTipsForDisabled(bool show);
+
+    /**
+        Sets whether tooltips should be shown for disabled buttons or not.
+
+        You may wish to show it to explain why a button is disabled or
+        what it normally does when enabled.
+
+        @since 2.9.5
+    */
+    bool GetShowToolTipsForDisabled() const;
+
 };
 
 /**
@@ -444,7 +528,8 @@ public:
     */
     wxRibbonButtonBarEvent(wxEventType command_type = wxEVT_NULL,
                        int win_id = 0,
-                       wxRibbonButtonBar* bar = NULL);
+                       wxRibbonButtonBar* bar = NULL,
+                       wxRibbonButtonBarButtonBase* button = NULL);
 
     /**
         Returns the bar which contains the button which the event relates to.
@@ -456,6 +541,20 @@ public:
     */
     void SetBar(wxRibbonButtonBar* bar);
     
+    /**
+        Returns the button which the event relates to.
+
+        @since 2.9.5
+    */
+    wxRibbonButtonBarButtonBase* GetButton();
+
+    /**
+        Sets the button relating to this event.
+
+        @since 2.9.5
+    */
+    void SetButton(wxRibbonButtonBarButtonBase* bar);
+
     /**
         Display a popup menu as a result of this (dropdown clicked) event.
     */

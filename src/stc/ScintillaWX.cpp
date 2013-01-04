@@ -132,7 +132,7 @@ public:
     void OnPaint(wxPaintEvent& WXUNUSED(evt))
     {
         wxAutoBufferedPaintDC dc(this);
-        Surface* surfaceWindow = Surface::Allocate();
+        Surface* surfaceWindow = Surface::Allocate(0);
         surfaceWindow->Init(&dc, m_ct->wDraw.GetID());
         m_ct->PaintCT(surfaceWindow);
         surfaceWindow->Release();
@@ -364,7 +364,6 @@ bool ScintillaWX::HaveMouseCapture() {
 void ScintillaWX::ScrollText(int linesToMove) {
     int dy = vs.lineHeight * (linesToMove);
     stc->ScrollWindow(0, dy);
-    stc->Update();
 }
 
 void ScintillaWX::SetVerticalScrollPos() {
@@ -672,6 +671,8 @@ sptr_t ScintillaWX::DefWndProc(unsigned int /*iMessage*/, uptr_t /*wParam*/, spt
 
 sptr_t ScintillaWX::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
       switch (iMessage) {
+#if 0  // TODO: check this
+          
       case SCI_CALLTIPSHOW: {
           // NOTE: This is copied here from scintilla/src/ScintillaBase.cxx
           // because of the little tweak that needs done below for wxGTK.
@@ -712,6 +713,7 @@ sptr_t ScintillaWX::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam)
           ct.wCallTip.Show();
           break;
       }
+#endif
 
 #ifdef SCI_LEXER
       case SCI_LOADLEXERLIBRARY:
@@ -746,8 +748,16 @@ void ScintillaWX::DoPaint(wxDC* dc, wxRect rect) {
 
     if (paintState == paintAbandoned) {
         // Painting area was insufficient to cover new styling or brace
-        // highlight positions
+        // highlight positions.  So trigger a new paint event that will
+        // repaint the whole window.
+        stc->Refresh(false);
+        
+#if defined(__WXOSX__)
+        // On Mac we also need to finish the current paint to make sure that
+        // everything is on the screen that needs to be there between now and
+        // when the next paint event arrives.
         FullPaintDC(dc);
+#endif
     }
     paintState = notPainting;
 }
@@ -755,8 +765,8 @@ void ScintillaWX::DoPaint(wxDC* dc, wxRect rect) {
 
 // Force the whole window to be repainted
 void ScintillaWX::FullPaint() {
-    wxClientDC dc(stc);
-    FullPaintDC(&dc);
+    stc->Refresh(false);
+    stc->Update();
 }
 
 

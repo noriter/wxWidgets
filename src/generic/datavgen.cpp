@@ -347,7 +347,7 @@ public:
     static wxDataViewTreeNode* CreateRootNode()
     {
         wxDataViewTreeNode *n = new wxDataViewTreeNode(NULL, wxDataViewItem());
-        n->SetHasChildren(true);
+        n->m_branchData = new BranchNodeData;
         n->m_branchData->open = true;
         return n;
     }
@@ -416,6 +416,11 @@ public:
 
     void ToggleOpen()
     {
+        // We do not allow the (invisible) root node to be collapsed because
+        // there is no way to expand it again.
+        if ( !m_parent )
+            return;
+
         wxCHECK_RET( m_branchData != NULL, "can't open leaf node" );
 
         int sum = 0;
@@ -446,6 +451,11 @@ public:
 
     void SetHasChildren(bool has)
     {
+        // The invisible root item always has children, so ignore any attempts
+        // to change this.
+        if ( !m_parent )
+            return;
+
         if ( !has )
         {
             wxDELETE(m_branchData);
@@ -602,7 +612,7 @@ public:
     void OnPaint( wxPaintEvent &event );
     void OnCharHook( wxKeyEvent &event );
     void OnChar( wxKeyEvent &event );
-    void OnVerticalNavigation(unsigned int newCurrent, const wxKeyEvent& event);
+    void OnVerticalNavigation(int delta, const wxKeyEvent& event);
     void OnLeftKey();
     void OnRightKey();
     void OnMouse( wxMouseEvent &event );
@@ -1007,11 +1017,13 @@ bool wxDataViewToggleRenderer::Render( wxRect cell, wxDC *dc, int WXUNUSED(state
         GetEnabled() == false)
         flags |= wxCONTROL_DISABLED;
 
-    // check boxes we draw must always have the same, standard size (if it's
-    // bigger than the cell size the checkbox will be truncated because the
-    // caller had set the clipping rectangle to prevent us from drawing outside
-    // the cell)
-    cell.SetSize(GetSize());
+    // Ensure that the check boxes always have at least the minimal required
+    // size, otherwise DrawCheckBox() doesn't really work well. If this size is
+    // greater than the cell size, the checkbox will be truncated but this is a
+    // lesser evil.
+    wxSize size = cell.GetSize();
+    size.IncTo(GetSize());
+    cell.SetSize(size);
 
     wxRendererNative::Get().DrawCheckBox(
             GetOwner()->GetOwner(),
@@ -1385,7 +1397,7 @@ wxDataViewMainWindow::wxDataViewMainWindow( wxDataViewCtrl *parent, wxWindowID i
     m_currentCol = NULL;
     m_currentColSetByKeyboard = false;
     m_useCellFocus = false;
-    m_currentRow = 0;
+    m_currentRow = (unsigned)-1;
 
 #ifdef __WXMSW__
     // We would like to use the same line height that Explorer uses. This is
@@ -1693,11 +1705,9 @@ void wxDataViewMainWindow::OnPaint( wxPaintEvent &WXUNUSED(event) )
     wxDataViewModel *model = GetModel();
     wxAutoBufferedPaintDC dc( this );
 
-#ifdef __WXMSW__
     dc.SetBrush(GetOwner()->GetBackgroundColour());
     dc.SetPen( *wxTRANSPARENT_PEN );
     dc.DrawRectangle(GetClientSize());
-#endif
 
     if ( IsEmpty() )
     {
@@ -2337,7 +2347,17 @@ bool wxDataViewMainWindow::ItemDeleted(const wxDataViewItem& parent,
         // If this was the last child to be removed, it's possible the parent
         // node became a leaf. Let's ask the model about it.
         if ( parentNode->GetChildNodes().empty() )
-            parentNode->SetHasChildren(GetModel()->IsContainer(parent));
+        {
+            bool isContainer = GetModel()->IsContainer(parent);
+            parentNode->SetHasChildren(isContainer);
+            if ( isContainer )
+            {
+                // If it's still a container, make sure we show "+" icon for it
+                // and not "-" one as there is nothing to collapse any more.
+                if ( parentNode->IsOpen() )
+                    parentNode->ToggleOpen();
+            }
+        }
 
         // Update selection by removing 'item' and its entire children tree from the selection.
         if ( !m_selection.empty() )
@@ -2378,7 +2398,7 @@ bool wxDataViewMainWindow::ItemDeleted(const wxDataViewItem& parent,
     }
 
     // Change the current row to the last row if the current exceed the max row number
-    if( m_currentRow > GetRowCount() )
+    if ( m_currentRow >= GetRowCount() )
         ChangeCurrentRow(m_count - 1);
 
     GetOwner()->InvalidateColBestWidths();
@@ -2452,9 +2472,17 @@ bool wxDataViewMainWindow::Cleared()
 {
     DestroyTree();
     m_selection.Clear();
+    m_currentRow = (unsigned)-1;
 
+    if (GetModel())
+    {
     SortPrepare();
     BuildTree( GetModel() );
+    }
+    else
+    {
+        m_count = 0;
+    }
 
     GetOwner()->InvalidateColBestWidths();
     UpdateDisplay();
@@ -2974,6 +3002,9 @@ private:
 wxDataViewTreeNode * wxDataViewMainWindow::GetTreeNodeByRow(unsigned int row) const
 {
     wxASSERT( !IsVirtualList() );
+
+    if ( row == (unsigned)-1 )
+        return NULL;
 
     RowToTreeNodeJob job( row , -2, m_root );
     Walker( m_root , job );
@@ -3681,13 +3712,11 @@ void wxDataViewMainWindow::OnChar( wxKeyEvent &event )
             break;
 
         case WXK_UP:
-            if ( m_currentRow > 0 )
-                OnVerticalNavigation( m_currentRow - 1, event );
+            OnVerticalNavigation( -1, event );
             break;
 
         case WXK_DOWN:
-            if ( m_currentRow + 1 < GetRowCount() )
-                OnVerticalNavigation( m_currentRow + 1, event );
+            OnVerticalNavigation( +1, event );
             break;
         // Add the process for tree expanding/collapsing
         case WXK_LEFT:
@@ -3699,37 +3728,19 @@ void wxDataViewMainWindow::OnChar( wxKeyEvent &event )
             break;
 
         case WXK_END:
-        {
-            if (!IsEmpty())
-                OnVerticalNavigation( GetRowCount() - 1, event );
+            OnVerticalNavigation( +(int)GetRowCount(), event );
             break;
-        }
+
         case WXK_HOME:
-            if (!IsEmpty())
-                OnVerticalNavigation( 0, event );
+            OnVerticalNavigation( -(int)GetRowCount(), event );
             break;
 
         case WXK_PAGEUP:
-            {
-                int steps = pageSize - 1;
-                int index = m_currentRow - steps;
-                if (index < 0)
-                    index = 0;
-
-                OnVerticalNavigation( index, event );
-            }
+            OnVerticalNavigation( -(pageSize - 1), event );
             break;
 
         case WXK_PAGEDOWN:
-            {
-                int steps = pageSize - 1;
-                unsigned int index = m_currentRow + steps;
-                unsigned int count = GetRowCount();
-                if ( index >= count )
-                    index = count - 1;
-
-                OnVerticalNavigation( index, event );
-            }
+            OnVerticalNavigation( +(pageSize - 1), event );
             break;
 
         default:
@@ -3737,16 +3748,24 @@ void wxDataViewMainWindow::OnChar( wxKeyEvent &event )
     }
 }
 
-void wxDataViewMainWindow::OnVerticalNavigation(unsigned int newCurrent, const wxKeyEvent& event)
+void wxDataViewMainWindow::OnVerticalNavigation(int delta, const wxKeyEvent& event)
 {
-    wxCHECK_RET( newCurrent < GetRowCount(),
-                wxT("invalid item index in OnVerticalNavigation()") );
-
     // if there is no selection, we cannot move it anywhere
-    if (!HasCurrentRow())
+    if (!HasCurrentRow() || IsEmpty())
         return;
 
+    int newRow = (int)m_currentRow + delta;
+
+    // let's keep the new row inside the allowed range
+    if ( newRow < 0 )
+        newRow = 0;
+
+    const int rowCount = (int)GetRowCount();
+    if ( newRow >= rowCount )
+        newRow = rowCount - 1;
+
     unsigned int oldCurrent = m_currentRow;
+    unsigned int newCurrent = (unsigned int)newRow;
 
     // in single selection we just ignore Shift as we can't select several
     // items anyhow
@@ -3798,6 +3817,8 @@ void wxDataViewMainWindow::OnLeftKey()
     else
     {
         wxDataViewTreeNode* node = GetTreeNodeByRow(m_currentRow);
+        if ( !node )
+            return;
 
         if ( TryAdvanceCurrentColumn(node, /*forward=*/false) )
             return;
@@ -3840,6 +3861,8 @@ void wxDataViewMainWindow::OnRightKey()
     else
     {
         wxDataViewTreeNode* node = GetTreeNodeByRow(m_currentRow);
+        if ( !node )
+            return;
 
         if ( node->HasChildren() )
         {
@@ -3924,9 +3947,13 @@ void wxDataViewMainWindow::OnMouse( wxMouseEvent &event )
         return;
     }
 
-    // set the focus to ourself if any of the mouse buttons are pressed
-    if(event.ButtonDown() && !HasFocus())
-        SetFocus();
+    if(event.ButtonDown())
+    {
+        // Not skipping button down events would prevent the system from
+        // setting focus to this window as most (all?) of them do by default,
+        // so skip it to enable default handling.
+        event.Skip();
+    }
 
     int x = event.GetX();
     int y = event.GetY();
@@ -4271,8 +4298,15 @@ void wxDataViewMainWindow::OnMouse( wxMouseEvent &event )
         m_currentCol = col;
         m_currentColSetByKeyboard = false;
 
+        // This flag is used to decide whether we should start editing the item
+        // label. We do it if the user clicks twice (but not double clicks,
+        // i.e. simulateClick is false) on the same item but not if the click
+        // was used for something else already, e.g. selecting the item (so it
+        // must have been already selected) or giving the focus to the control
+        // (so it must have had focus already).
         m_lastOnSame = !simulateClick && ((col == oldCurrentCol) &&
-                        (current == oldCurrentRow)) && oldWasSelected;
+                        (current == oldCurrentRow)) && oldWasSelected &&
+                        HasFocus();
 
         // Call ActivateCell() after everything else as under GTK+
         if ( IsCellEditableInMode(item, col, wxDATAVIEW_CELL_ACTIVATABLE) )
@@ -4518,13 +4552,23 @@ bool wxDataViewCtrl::AssociateModel( wxDataViewModel *model )
     if (!wxDataViewCtrlBase::AssociateModel( model ))
         return false;
 
+    if (model)
+    {
     m_notifier = new wxGenericDataViewModelNotifier( m_clientArea );
-
     model->AddNotifier( m_notifier );
+    }
+    else if (m_notifier)
+    {
+        m_notifier->Cleared();
+        m_notifier = NULL;
+    }
 
     m_clientArea->DestroyTree();
 
+    if (model)
+    {
     m_clientArea->BuildTree(model);
+    }
 
     m_clientArea->UpdateDisplay();
 

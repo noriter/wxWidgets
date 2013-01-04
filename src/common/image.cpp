@@ -2306,7 +2306,10 @@ static wxImage LoadImageFromResource(const wxString &name, wxBitmapType type)
         image.SetMaskColour(0xc0, 0xc0, 0xc0);
     }
 
-    image.InitAlpha();
+    // We could have already loaded alpha from the resources, but if not,
+    // initialize it now using the mask.
+    if ( !image.HasAlpha() )
+        image.InitAlpha();
 
     return image;
 }
@@ -2876,10 +2879,6 @@ wxImage::HSVValue wxImage::RGBtoHSV(const RGBValue& rgb)
 
             case BLUE:
                 hue = 4.0 + (red - green) / deltaRGB;
-                break;
-
-            default:
-                wxFAIL_MSG(wxT("hue not specified"));
                 break;
         }
 

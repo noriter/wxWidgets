@@ -99,7 +99,6 @@ static pascal OSStatus wxWebKitKeyEventHandler( EventHandlerCallRef handler , Ev
 
     UInt32 keyCode ;
     UInt32 modifiers ;
-    Point point ;
     UInt32 when = EventTimeToTicks( GetEventTime( event ) ) ;
 
 #if wxUSE_UNICODE
@@ -131,7 +130,6 @@ static pascal OSStatus wxWebKitKeyEventHandler( EventHandlerCallRef handler , Ev
     GetEventParameter( event, kEventParamKeyMacCharCodes, typeChar, NULL, sizeof(char), NULL, &charCode );
     GetEventParameter( event, kEventParamKeyCode, typeUInt32, NULL, sizeof(UInt32), NULL, &keyCode );
     GetEventParameter( event, kEventParamKeyModifiers, typeUInt32, NULL, sizeof(UInt32), NULL, &modifiers );
-    GetEventParameter( event, kEventParamMouseLocation, typeQDPoint, NULL, sizeof(Point), NULL, &point );
 
     UInt32 message = (keyCode << 8) + charCode;
     switch ( GetEventKind( event ) )
@@ -143,7 +141,7 @@ static pascal OSStatus wxWebKitKeyEventHandler( EventHandlerCallRef handler , Ev
                 WXEVENTHANDLERCALLREF formerHandler = wxTheApp->MacGetCurrentEventHandlerCallRef() ;
                 wxTheApp->MacSetCurrentEvent( event , handler ) ;
                 if ( /* focus && */ wxTheApp->MacSendKeyDownEvent(
-                    focus , message , modifiers , when , point.h , point.v , uniChar[0] ) )
+                    focus , message , modifiers , when , uniChar[0] ) )
                 {
                     result = noErr ;
                 }
@@ -153,7 +151,7 @@ static pascal OSStatus wxWebKitKeyEventHandler( EventHandlerCallRef handler , Ev
 
         case kEventRawKeyUp :
             if ( /* focus && */ wxTheApp->MacSendKeyUpEvent(
-                focus , message , modifiers , when , point.h , point.v , uniChar[0] ) )
+                focus , message , modifiers , when , uniChar[0] ) )
             {
                 result = noErr ;
             }
@@ -167,8 +165,6 @@ static pascal OSStatus wxWebKitKeyEventHandler( EventHandlerCallRef handler , Ev
                 event.m_rawControlDown = modifiers & controlKey;
                 event.m_altDown = modifiers & optionKey;
                 event.m_controlDown = modifiers & cmdKey;
-                event.m_x = point.h;
-                event.m_y = point.v;
 
 #if wxUSE_UNICODE
                 event.m_uniChar = uniChar[0] ;
@@ -394,6 +390,15 @@ inline int wxNavTypeFromWebNavType(int type){
 
 @end
 
+@interface MyUIDelegate : NSObject
+{
+    wxWebKitCtrl* webKitWindow;
+}
+
+- initWithWxWindow: (wxWebKitCtrl*)inWindow;
+
+@end
+
 // ----------------------------------------------------------------------------
 // creation/destruction
 // ----------------------------------------------------------------------------
@@ -485,6 +490,10 @@ bool wxWebKitCtrl::Create(wxWindow *parent,
     MyPolicyDelegate* myPolicyDelegate = [[MyPolicyDelegate alloc] initWithWxWindow: this];
     [m_webView setPolicyDelegate:myPolicyDelegate];
 
+    // this is used to provide printing support for JavaScript
+    MyUIDelegate* myUIDelegate = [[MyUIDelegate alloc] initWithWxWindow: this];
+    [m_webView setUIDelegate:myUIDelegate];
+
     LoadURL(m_currentURL);
     return true;
 }
@@ -493,14 +502,19 @@ wxWebKitCtrl::~wxWebKitCtrl()
 {
     MyFrameLoadMonitor* myFrameLoadMonitor = [m_webView frameLoadDelegate];
     MyPolicyDelegate* myPolicyDelegate = [m_webView policyDelegate];
+    MyUIDelegate* myUIDelegate = [m_webView UIDelegate];
     [m_webView setFrameLoadDelegate: nil];
     [m_webView setPolicyDelegate: nil];
+    [m_webView setUIDelegate: nil];
     
     if (myFrameLoadMonitor)
         [myFrameLoadMonitor release];
         
     if (myPolicyDelegate)
         [myPolicyDelegate release];
+
+    if (myUIDelegate)
+        [myUIDelegate release];
 }
 
 // ----------------------------------------------------------------------------
@@ -922,6 +936,25 @@ void wxWebKitCtrl::MacVisibilityChanged(){
         webKitWindow->GetEventHandler()->ProcessEvent(thisEvent);
 
     [listener use];
+}
+@end
+
+
+@implementation MyUIDelegate
+
+- initWithWxWindow: (wxWebKitCtrl*)inWindow
+{
+    self = [super init];
+    webKitWindow = inWindow;    // non retained
+    return self;
+}
+
+- (void)webView:(WebView *)sender printFrameView:(WebFrameView *)frameView
+{
+    wxUnusedVar(sender);
+    wxUnusedVar(frameView);
+
+    webKitWindow->Print(true);
 }
 @end
 

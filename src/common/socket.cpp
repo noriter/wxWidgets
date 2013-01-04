@@ -172,7 +172,9 @@ public:
           m_oldflags(socket->GetFlags())
 
     {
-        wxASSERT_MSG( flag == wxSOCKET_WAITALL || flag == wxSOCKET_NOWAIT,
+        // We can be passed only wxSOCKET_WAITALL{_READ,_WRITE} or
+        // wxSOCKET_NOWAIT{_READ,_WRITE} normally.
+        wxASSERT_MSG( !(flag & wxSOCKET_WAITALL) || !(flag & wxSOCKET_NOWAIT),
                       "not a wait flag" );
 
         // preserve wxSOCKET_BLOCK value when switching to wxSOCKET_WAITALL
@@ -817,6 +819,8 @@ void wxSocketBase::Init()
     m_writing      =
     m_closed       = false;
     m_lcount       = 0;
+    m_lcount_read  = 0;
+    m_lcount_write = 0;
     m_timeout      = 600;
     m_beingDeleted = false;
 
@@ -887,8 +891,12 @@ bool wxSocketBase::Destroy()
     Notify(false);
 
     // Schedule this object for deletion instead of destroying it right now if
-    // possible as we may have other events pending for it
-    if ( wxTheApp )
+    // it can have other events pending for it and we have a way to do it.
+    //
+    // Notice that sockets used in other threads won't have any events for them
+    // and we shouldn't use delayed destruction mechanism for them as it's not
+    // MT-safe.
+    if ( wxIsMainThread() && wxTheApp )
     {
         wxTheApp->ScheduleForDestruction(this);
     }
@@ -943,7 +951,8 @@ wxSocketBase& wxSocketBase::Read(void* buffer, wxUint32 nbytes)
 {
     wxSocketReadGuard read(this);
 
-    m_lcount = DoRead(buffer, nbytes);
+    m_lcount_read = DoRead(buffer, nbytes);
+    m_lcount = m_lcount_read;
 
     return *this;
 }
@@ -979,7 +988,7 @@ wxUint32 wxSocketBase::DoRead(void* buffer_, wxUint32 nbytes)
             if ( m_impl->GetLastError() == wxSOCKET_WOULDBLOCK )
             {
                 // if we don't want to wait, just return immediately
-                if ( m_flags & wxSOCKET_NOWAIT )
+                if ( m_flags & wxSOCKET_NOWAIT_READ )
                 {
                     // this shouldn't be counted as an error in this case
                     SetError(wxSOCKET_NOERROR);
@@ -1015,7 +1024,7 @@ wxUint32 wxSocketBase::DoRead(void* buffer_, wxUint32 nbytes)
             // we're not going to read anything else and so if we haven't read
             // anything (or not everything in wxSOCKET_WAITALL case) already,
             // signal an error
-            if ( (m_flags & wxSOCKET_WAITALL) || !total )
+            if ( (m_flags & wxSOCKET_WAITALL_READ) || !total )
                 SetError(wxSOCKET_IOERR);
             break;
         }
@@ -1024,7 +1033,7 @@ wxUint32 wxSocketBase::DoRead(void* buffer_, wxUint32 nbytes)
 
         // if we are happy to read something and not the entire nbytes bytes,
         // then we're done
-        if ( !(m_flags & wxSOCKET_WAITALL) )
+        if ( !(m_flags & wxSOCKET_WAITALL_READ) )
             break;
 
         nbytes -= ret;
@@ -1044,7 +1053,7 @@ wxSocketBase& wxSocketBase::ReadMsg(void* buffer, wxUint32 nbytes)
 
     wxSocketReadGuard read(this);
 
-    wxSocketWaitModeChanger changeFlags(this, wxSOCKET_WAITALL);
+    wxSocketWaitModeChanger changeFlags(this, wxSOCKET_WAITALL_READ);
 
     bool ok = false;
     if ( DoRead(&msg, sizeof(msg)) == sizeof(msg) )
@@ -1071,7 +1080,8 @@ wxSocketBase& wxSocketBase::ReadMsg(void* buffer, wxUint32 nbytes)
                 len2 = 0;
 
             // Don't attempt to read if the msg was zero bytes long.
-            m_lcount = len ? DoRead(buffer, len) : 0;
+            m_lcount_read = len ? DoRead(buffer, len) : 0;
+            m_lcount = m_lcount_read;
 
             if ( len2 )
             {
@@ -1127,7 +1137,8 @@ wxSocketBase& wxSocketBase::Write(const void *buffer, wxUint32 nbytes)
 {
     wxSocketWriteGuard write(this);
 
-    m_lcount = DoWrite(buffer, nbytes);
+    m_lcount_write = DoWrite(buffer, nbytes);
+    m_lcount = m_lcount_write;
 
     return *this;
 }
@@ -1147,7 +1158,7 @@ wxUint32 wxSocketBase::DoWrite(const void *buffer_, wxUint32 nbytes)
     {
         if ( m_impl->m_stream && !m_connected )
         {
-            if ( (m_flags & wxSOCKET_WAITALL) || !total )
+            if ( (m_flags & wxSOCKET_WAITALL_WRITE) || !total )
                 SetError(wxSOCKET_IOERR);
             break;
         }
@@ -1157,7 +1168,7 @@ wxUint32 wxSocketBase::DoWrite(const void *buffer_, wxUint32 nbytes)
         {
             if ( m_impl->GetLastError() == wxSOCKET_WOULDBLOCK )
             {
-                if ( m_flags & wxSOCKET_NOWAIT )
+                if ( m_flags & wxSOCKET_NOWAIT_WRITE )
                     break;
 
                 if ( !DoWaitWithTimeout(wxSOCKET_OUTPUT_FLAG) )
@@ -1177,7 +1188,7 @@ wxUint32 wxSocketBase::DoWrite(const void *buffer_, wxUint32 nbytes)
 
         total += ret;
 
-        if ( !(m_flags & wxSOCKET_WAITALL) )
+        if ( !(m_flags & wxSOCKET_WAITALL_WRITE) )
             break;
 
         nbytes -= ret;
@@ -1197,7 +1208,7 @@ wxSocketBase& wxSocketBase::WriteMsg(const void *buffer, wxUint32 nbytes)
 
     wxSocketWriteGuard write(this);
 
-    wxSocketWaitModeChanger changeFlags(this, wxSOCKET_WAITALL);
+    wxSocketWaitModeChanger changeFlags(this, wxSOCKET_WAITALL_WRITE);
 
     msg.sig[0] = (unsigned char) 0xad;
     msg.sig[1] = (unsigned char) 0xde;
@@ -1212,8 +1223,9 @@ wxSocketBase& wxSocketBase::WriteMsg(const void *buffer, wxUint32 nbytes)
     bool ok = false;
     if ( DoWrite(&msg, sizeof(msg)) == sizeof(msg) )
     {
-        m_lcount = DoWrite(buffer, nbytes);
-        if ( m_lcount == nbytes )
+        m_lcount_write = DoWrite(buffer, nbytes);
+        m_lcount = m_lcount_write;
+        if ( m_lcount_write == nbytes )
         {
             msg.sig[0] = (unsigned char) 0xed;
             msg.sig[1] = (unsigned char) 0xfe;

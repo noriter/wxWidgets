@@ -24,8 +24,9 @@ BCCDIR = $(MAKEDIR)\..
 WX_RELEASE_NODOT = 29
 COMPILER_PREFIX = bcc
 OBJS = \
-	$(COMPILER_PREFIX)_$(PORTNAME)$(WXUNIVNAME)$(WXUNICODEFLAG)$(WXDEBUGFLAG)$(WXDLLFLAG)$(CFG)
-LIBDIRNAME = .\..\lib\$(COMPILER_PREFIX)_$(LIBTYPE_SUFFIX)$(CFG)
+	$(COMPILER_PREFIX)$(COMPILER_VERSION)_$(PORTNAME)$(WXUNIVNAME)$(WXUNICODEFLAG)$(WXDEBUGFLAG)$(WXDLLFLAG)$(CFG)
+LIBDIRNAME = \
+	.\..\lib\$(COMPILER_PREFIX)$(COMPILER_VERSION)_$(LIBTYPE_SUFFIX)$(CFG)
 SETUPHDIR = \
 	$(LIBDIRNAME)\$(PORTNAME)$(WXUNIVNAME)$(WXUNICODEFLAG)$(WXDEBUGFLAG)
 TEST_CXXFLAGS = $(__RUNTIME_LIBS) -I$(BCCDIR)\include $(__DEBUGINFO) \
@@ -189,6 +190,7 @@ TEST_GUI_OBJECTS =  \
 	$(OBJS)\test_gui_virtlistctrltest.obj \
 	$(OBJS)\test_gui_webtest.obj \
 	$(OBJS)\test_gui_windowtest.obj \
+	$(OBJS)\test_gui_dialogtest.obj \
 	$(OBJS)\test_gui_clone.obj \
 	$(OBJS)\test_gui_propagation.obj \
 	$(OBJS)\test_gui_keyboard.obj \
@@ -219,6 +221,9 @@ PORTNAME = base
 !endif
 !if "$(USE_GUI)" == "1"
 PORTNAME = msw
+!endif
+!if "$(OFFICIAL_BUILD)" == "1"
+COMPILER_VERSION = ERROR-COMPILER-VERSION-MUST-BE-SET-FOR-OFFICIAL-BUILD
 !endif
 !if "$(BUILD)" == "debug"
 WXDEBUGFLAG = d
@@ -905,6 +910,9 @@ $(OBJS)\test_gui_webtest.obj: .\controls\webtest.cpp
 
 $(OBJS)\test_gui_windowtest.obj: .\controls\windowtest.cpp
 	$(CXX) -q -c -P -o$@ $(TEST_GUI_CXXFLAGS) .\controls\windowtest.cpp
+
+$(OBJS)\test_gui_dialogtest.obj: .\controls\dialogtest.cpp
+	$(CXX) -q -c -P -o$@ $(TEST_GUI_CXXFLAGS) .\controls\dialogtest.cpp
 
 $(OBJS)\test_gui_clone.obj: .\events\clone.cpp
 	$(CXX) -q -c -P -o$@ $(TEST_GUI_CXXFLAGS) .\events\clone.cpp

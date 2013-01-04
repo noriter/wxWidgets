@@ -67,8 +67,9 @@ public:
 
         SetHint(_("Search"));
 
-        // remove the default minsize, the searchctrl will have one instead
-        SetSizeHints(wxDefaultCoord,wxDefaultCoord);
+        // Ensure that our best size is recomputed using our overridden
+        // DoGetBestSize().
+        InvalidateBestSize();
     }
 
 
@@ -167,7 +168,11 @@ public:
           m_bmp(bmp)
     { }
 
-    void SetBitmapLabel(const wxBitmap& label) { m_bmp = label; }
+    void SetBitmapLabel(const wxBitmap& label)
+    {
+        m_bmp = label;
+        InvalidateBestSize();
+    }
 
     // The buttons in wxSearchCtrl shouldn't accept focus from keyboard because
     // this would interfere with the usual TAB processing: the user expects
@@ -230,7 +235,7 @@ BEGIN_EVENT_TABLE(wxSearchButton, wxControl)
 END_EVENT_TABLE()
 
 BEGIN_EVENT_TABLE(wxSearchCtrl, wxSearchCtrlBase)
-    EVT_SEARCHCTRL_SEARCH_BTN(wxID_ANY, wxSearchCtrl::OnSearchButton)
+    EVT_SEARCHCTRL_CANCEL_BTN(wxID_ANY, wxSearchCtrl::OnCancelButton)
     EVT_SET_FOCUS(wxSearchCtrl::OnSetFocus)
     EVT_SIZE(wxSearchCtrl::OnSize)
 END_EVENT_TABLE()
@@ -321,7 +326,6 @@ bool wxSearchCtrl::Create(wxWindow *parent, wxWindowID id,
                                         wxEVT_COMMAND_SEARCHCTRL_CANCEL_BTN,
                                         m_cancelBitmap);
 
-    SetForegroundColour( m_text->GetForegroundColour() );
     SetBackgroundColour( m_text->GetBackgroundColour() );
 
     RecalcBitmaps();
@@ -1172,8 +1176,9 @@ void wxSearchCtrl::RecalcBitmaps()
     }
 }
 
-void wxSearchCtrl::OnSearchButton( wxCommandEvent& event )
+void wxSearchCtrl::OnCancelButton( wxCommandEvent& event )
 {
+    m_text->Clear();
     event.Skip();
 }
 

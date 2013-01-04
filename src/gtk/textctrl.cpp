@@ -546,54 +546,10 @@ gtk_text_changed_callback( GtkWidget *WXUNUSED(widget), wxTextCtrl *win )
     if ( win->IgnoreTextUpdate() )
         return;
 
-    if (!win->m_hasVMT) return;
-
     if ( win->MarkDirtyOnChange() )
         win->MarkDirty();
 
     win->SendTextUpdatedEvent();
-}
-}
-
-//-----------------------------------------------------------------------------
-//  clipboard events: "copy-clipboard", "cut-clipboard", "paste-clipboard"
-//-----------------------------------------------------------------------------
-
-// common part of the event handlers below
-static void
-handle_text_clipboard_callback( GtkWidget *widget, wxTextCtrl *win,
-                                wxEventType eventType, const gchar * signal_name)
-{
-    wxClipboardTextEvent event( eventType, win->GetId() );
-    event.SetEventObject( win );
-    if ( win->HandleWindowEvent( event ) )
-    {
-        // don't let the default processing to take place if we did something
-        // ourselves in the event handler
-        g_signal_stop_emission_by_name (widget, signal_name);
-    }
-}
-
-extern "C" {
-static void
-gtk_copy_clipboard_callback( GtkWidget *widget, wxTextCtrl *win )
-{
-    handle_text_clipboard_callback(
-        widget, win, wxEVT_COMMAND_TEXT_COPY, "copy-clipboard" );
-}
-
-static void
-gtk_cut_clipboard_callback( GtkWidget *widget, wxTextCtrl *win )
-{
-    handle_text_clipboard_callback(
-        widget, win, wxEVT_COMMAND_TEXT_CUT, "cut-clipboard" );
-}
-
-static void
-gtk_paste_clipboard_callback( GtkWidget *widget, wxTextCtrl *win )
-{
-    handle_text_clipboard_callback(
-        widget, win, wxEVT_COMMAND_TEXT_PASTE, "paste-clipboard" );
 }
 }
 
@@ -649,12 +605,23 @@ void wxTextCtrl::Init()
     SetUpdateFont(false);
 
     m_text = NULL;
+    m_buffer = NULL;
     m_showPositionOnThaw = NULL;
     m_anonymousMarkList = NULL;
 }
 
 wxTextCtrl::~wxTextCtrl()
 {
+    if (m_text)
+        GTKDisconnect(m_text);
+    if (m_buffer)
+        GTKDisconnect(m_buffer);
+
+    // this is also done by wxWindowGTK dtor, but has to be done here so our
+    // DoThaw() override is called
+    while (IsFrozen())
+        Thaw();
+
     if (m_anonymousMarkList)
         g_slist_free(m_anonymousMarkList);
 }
@@ -829,12 +796,7 @@ bool wxTextCtrl::Create( wxWindow *parent,
     }
 
 
-    g_signal_connect (m_text, "copy-clipboard",
-                      G_CALLBACK (gtk_copy_clipboard_callback), this);
-    g_signal_connect (m_text, "cut-clipboard",
-                      G_CALLBACK (gtk_cut_clipboard_callback), this);
-    g_signal_connect (m_text, "paste-clipboard",
-                      G_CALLBACK (gtk_paste_clipboard_callback), this);
+    GTKConnectClipboardSignals(m_text);
 
     m_cursor = wxCursor( wxCURSOR_IBEAM );
 
@@ -1858,12 +1820,70 @@ void wxTextCtrl::OnUpdateRedo(wxUpdateUIEvent& event)
 
 wxSize wxTextCtrl::DoGetBestSize() const
 {
-    // FIXME should be different for multi-line controls...
-    wxSize ret( wxControl::DoGetBestSize() );
-    wxSize best(80, ret.y);
-    CacheBestSize(best);
-    return best;
+    return DoGetSizeFromTextSize(80);
 }
+
+wxSize wxTextCtrl::DoGetSizeFromTextSize(int xlen, int ylen) const
+{
+    wxASSERT_MSG( m_widget, wxS("GetSizeFromTextSize called before creation") );
+
+    wxSize tsize(xlen, 0);
+    int cHeight = GetCharHeight();
+
+    if ( IsSingleLine() )
+    {
+        if ( HasFlag(wxBORDER_NONE) )
+        {
+            tsize.y = cHeight;
+#ifdef __WXGTK3__
+            tsize.IncBy(9, 0);
+#else
+            tsize.IncBy(4, 0);
+#endif // GTK3
+        }
+        else
+        {
+            // default height
+            tsize.y = GTKGetPreferredSize(m_widget).y;
+            // Add the margins we have previously set, but only the horizontal border
+            // as vertical one has been taken account at GTKGetPreferredSize().
+            // Also get other GTK+ margins.
+            tsize.IncBy( GTKGetEntryMargins(GetEntry()).x, 0);
+        }
+    }
+
+    //multiline
+    else
+    {
+        // add space for vertical scrollbar
+        if ( m_scrollBar[1] && !(m_windowStyle & wxTE_NO_VSCROLL) )
+            tsize.IncBy(GTKGetPreferredSize(GTK_WIDGET(m_scrollBar[1])).x + 3, 0);
+
+        // height
+        tsize.y = cHeight;
+        if ( ylen <= 0 )
+        {
+            tsize.y = 1 + cHeight * wxMax(wxMin(GetNumberOfLines(), 10), 2);
+            // add space for horizontal scrollbar
+            if ( m_scrollBar[0] && (m_windowStyle & wxHSCROLL) )
+                tsize.IncBy(0, GTKGetPreferredSize(GTK_WIDGET(m_scrollBar[0])).y + 3);
+        }
+
+        if ( !HasFlag(wxBORDER_NONE) )
+        {
+            // hardcode borders, margins, etc
+            tsize.IncBy(5, 4);
+        }
+    }
+
+    // Perhaps the user wants something different from CharHeight, or ylen
+    // is used as the height of a multiline text.
+    if ( ylen > 0 )
+        tsize.IncBy(0, ylen - cHeight);
+
+    return tsize;
+}
+
 
 // ----------------------------------------------------------------------------
 // freeze/thaw
@@ -1873,12 +1893,10 @@ void wxTextCtrl::DoFreeze()
 {
     wxCHECK_RET(m_text != NULL, wxT("invalid text ctrl"));
 
-    wxWindow::DoFreeze();
+    GTKFreezeWidget(m_text);
 
     if ( HasFlag(wxTE_MULTILINE) )
     {
-        GTKFreezeWidget(m_text);
-
         // removing buffer dramatically speeds up insertion:
         g_object_ref(m_buffer);
         GtkTextBuffer* buf_new = gtk_text_buffer_new(NULL);
@@ -1919,12 +1937,9 @@ void wxTextCtrl::DoThaw()
                 GTK_TEXT_VIEW(m_text), m_showPositionOnThaw);
             m_showPositionOnThaw = NULL;
         }
-
-        // and thaw the window
-        GTKThawWidget(m_text);
     }
 
-    wxWindow::DoThaw();
+    GTKThawWidget(m_text);
 }
 
 // ----------------------------------------------------------------------------
@@ -1994,7 +2009,7 @@ bool wxTextCtrl::GTKProcessEvent(wxEvent& event) const
 wxVisualAttributes
 wxTextCtrl::GetClassDefaultAttributes(wxWindowVariant WXUNUSED(variant))
 {
-    return GetDefaultAttributesFromGTKWidget(gtk_entry_new, true);
+    return GetDefaultAttributesFromGTKWidget(gtk_entry_new(), true);
 }
 
 #endif // wxUSE_TEXTCTRL

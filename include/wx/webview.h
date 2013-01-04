@@ -68,6 +68,16 @@ enum wxWebViewReloadFlags
     wxWEB_VIEW_RELOAD_NO_CACHE
 };
 
+enum wxWebViewFindFlags
+{
+    wxWEB_VIEW_FIND_WRAP =             0x0001,
+    wxWEB_VIEW_FIND_ENTIRE_WORD =      0x0002,
+    wxWEB_VIEW_FIND_MATCH_CASE =       0x0004,
+    wxWEB_VIEW_FIND_HIGHLIGHT_RESULT = 0x0008,
+    wxWEB_VIEW_FIND_BACKWARDS =        0x0010,
+    wxWEB_VIEW_FIND_DEFAULT =          0
+};
+
 enum wxWebViewBackend
 {
     wxWEB_VIEW_BACKEND_DEFAULT,
@@ -93,6 +103,11 @@ extern WXDLLIMPEXP_DATA_WEBVIEW(const char) wxWebViewDefaultURLStr[];
 class WXDLLIMPEXP_WEBVIEW wxWebView : public wxControl
 {
 public:
+    wxWebView()
+    {
+        m_showMenu = true;
+    }
+
     virtual ~wxWebView() {}
 
     virtual bool Create(wxWindow* parent,
@@ -114,12 +129,17 @@ public:
            const wxString& name = wxWebViewNameStr);
 
     //General methods
+    virtual void EnableContextMenu(bool enable = true)
+    {
+        m_showMenu = enable;
+    }
     virtual wxString GetCurrentTitle() const = 0;
     virtual wxString GetCurrentURL() const = 0;
     // TODO: handle choosing a frame when calling GetPageSource()?
     virtual wxString GetPageSource() const = 0;
     virtual wxString GetPageText() const = 0;
     virtual bool IsBusy() const = 0;
+    virtual bool IsContextMenuEnabled() const { return m_showMenu; }
     virtual bool IsEditable() const = 0;
     virtual void LoadURL(const wxString& url) = 0;
     virtual void Print() = 0;
@@ -127,12 +147,15 @@ public:
     virtual void Reload(wxWebViewReloadFlags flags = wxWEB_VIEW_RELOAD_DEFAULT) = 0;
     virtual void RunScript(const wxString& javascript) = 0;
     virtual void SetEditable(bool enable = true) = 0;
-    virtual void SetPage(const wxString& html, const wxString& baseUrl) = 0;
-    virtual void SetPage(wxInputStream& html, wxString baseUrl)
+    void SetPage(const wxString& html, const wxString& baseUrl)
+    {
+        DoSetPage(html, baseUrl);
+    }
+    void SetPage(wxInputStream& html, wxString baseUrl)
     {
         wxStringOutputStream stream;
         stream.Write(html);
-        SetPage(stream.GetString(), baseUrl);
+        DoSetPage(stream.GetString(), baseUrl);
     }
     virtual void Stop() = 0;
 
@@ -175,6 +198,17 @@ public:
     virtual bool CanRedo() const = 0;
     virtual void Undo() = 0;
     virtual void Redo() = 0;
+
+    //Get the pointer to the underlying native engine.
+    virtual void* GetNativeBackend() const = 0;
+    //Find function
+    virtual long Find(const wxString& text, int flags = wxWEB_VIEW_FIND_DEFAULT) = 0;
+
+protected:
+    virtual void DoSetPage(const wxString& html, const wxString& baseUrl) = 0;
+
+private:
+    bool m_showMenu;
 
     wxDECLARE_ABSTRACT_CLASS(wxWebView);
 };

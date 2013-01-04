@@ -111,7 +111,7 @@ bool shouldHandleSelector(SEL selector)
     return (wxNonOwnedWindowCocoaImpl*) wxNonOwnedWindowImpl::FindFromWXWindow( self );
 }
 
-// TODO in cocoa everything during a drag is sent to the NSWindow the mouse down occured, 
+// TODO in cocoa everything during a drag is sent to the NSWindow the mouse down occurred,
 // this does not conform to the wx behaviour if the window is not captured, so try to resend
 // or capture all wx mouse event handling at the tlw as we did for carbon
 
@@ -450,12 +450,19 @@ extern int wxOSXGetIdFromSelector(SEL action );
         if ( wxpeer )
         {
             wxpeer->HandleActivated(0, false);
+            // as for wx the deactivation also means losing focus we
+            // must trigger this manually
+            [window makeFirstResponder:nil];
+            
+            // TODO Remove if no problems arise with Popup Windows
+#if 0
             // Needed for popup window since the firstResponder
             // (focus in wx) doesn't change when this
             // TLW becomes inactive.
             wxFocusEvent event( wxEVT_KILL_FOCUS, wxpeer->GetId());
             event.SetEventObject(wxpeer);
             wxpeer->HandleWindowEvent(event);
+#endif
         }
     }
 }
@@ -688,7 +695,8 @@ bool wxNonOwnedWindowCocoaImpl::Show(bool show)
         if ( wxpeer )
         {
             // add to parent window before showing
-            if ( wxpeer->GetParent() )
+            wxDialog * const dialog = wxDynamicCast(wxpeer, wxDialog);
+            if ( wxpeer->GetParent() && dialog && dialog->IsModal())
             {
                 NSView * parentView = wxpeer->GetParent()->GetPeer()->GetWXWidget();
                 if ( parentView )

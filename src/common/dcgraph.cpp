@@ -18,27 +18,13 @@
 
 #if wxUSE_GRAPHICS_CONTEXT
 
-#include "wx/graphics.h"
 #include "wx/dcgraph.h"
 
 #ifndef WX_PRECOMP
     #include "wx/icon.h"
-    #include "wx/bitmap.h"
+    #include "wx/dcclient.h"
     #include "wx/dcmemory.h"
-    #include "wx/region.h"
 #endif
-
-#include "wx/dcclient.h"
-
-#ifdef __WXOSX_OR_COCOA__
-#ifdef __WXOSX_IPHONE__
-    #include <CoreGraphics/CoreGraphics.h>
-#else
-    #include <ApplicationServices/ApplicationServices.h>
-#endif
-#endif
-
-#include <limits.h>     // for INT_MAX
 
 //-----------------------------------------------------------------------------
 // constants
@@ -157,7 +143,7 @@ IMPLEMENT_ABSTRACT_CLASS(wxGCDCImpl, wxDCImpl)
 wxGCDCImpl::wxGCDCImpl( wxDC *owner ) :
    wxDCImpl( owner )
 {
-    Init();
+    Init(wxGraphicsContext::Create());
 }
 
 void wxGCDCImpl::SetGraphicsContext( wxGraphicsContext* ctx )
@@ -179,26 +165,21 @@ void wxGCDCImpl::SetGraphicsContext( wxGraphicsContext* ctx )
 wxGCDCImpl::wxGCDCImpl( wxDC *owner, const wxWindowDC& dc ) :
    wxDCImpl( owner )
 {
-    Init();
-    SetGraphicsContext( wxGraphicsContext::Create(dc) );
+    Init(wxGraphicsContext::Create(dc));
     m_window = dc.GetWindow();
 }
 
 wxGCDCImpl::wxGCDCImpl( wxDC *owner, const wxMemoryDC& dc ) :
    wxDCImpl( owner )
 {
-    Init();
-    wxGraphicsContext* context;
-    context = wxGraphicsContext::Create(dc);
-    SetGraphicsContext( context );
+    Init(wxGraphicsContext::Create(dc));
 }
 
 #if wxUSE_PRINTING_ARCHITECTURE
 wxGCDCImpl::wxGCDCImpl( wxDC *owner, const wxPrinterDC& dc ) :
    wxDCImpl( owner )
 {
-    Init();
-    SetGraphicsContext( wxGraphicsContext::Create(dc) );
+    Init(wxGraphicsContext::Create(dc));
 }
 #endif
 
@@ -206,12 +187,18 @@ wxGCDCImpl::wxGCDCImpl( wxDC *owner, const wxPrinterDC& dc ) :
 wxGCDCImpl::wxGCDCImpl(wxDC *owner, const wxEnhMetaFileDC& dc)
    : wxDCImpl(owner)
 {
-    Init();
-    SetGraphicsContext(wxGraphicsContext::Create(dc));
+    Init(wxGraphicsContext::Create(dc));
 }
 #endif
 
-void wxGCDCImpl::Init()
+wxGCDCImpl::wxGCDCImpl(wxDC* owner, int)
+   : wxDCImpl(owner)
+{
+    // derived class will set a context
+    Init(NULL);
+}
+
+void wxGCDCImpl::Init(wxGraphicsContext* ctx)
 {
     m_ok = false;
     m_colour = true;
@@ -222,10 +209,12 @@ void wxGCDCImpl::Init()
     m_font = *wxNORMAL_FONT;
     m_brush = *wxWHITE_BRUSH;
 
-    m_graphicContext = wxGraphicsContext::Create();
+    m_graphicContext = NULL;
+    if (ctx)
+        SetGraphicsContext(ctx);
+
     m_logicalFunctionSupported = true;
 }
-
 
 wxGCDCImpl::~wxGCDCImpl()
 {
@@ -300,22 +289,8 @@ void wxGCDCImpl::DoSetClippingRegion( wxCoord x, wxCoord y, wxCoord w, wxCoord h
     wxCHECK_RET( IsOk(), wxT("wxGCDC(cg)::DoSetClippingRegion - invalid DC") );
 
     m_graphicContext->Clip( x, y, w, h );
-    if ( m_clipping )
-    {
-        m_clipX1 = wxMax( m_clipX1, x );
-        m_clipY1 = wxMax( m_clipY1, y );
-        m_clipX2 = wxMin( m_clipX2, (x + w) );
-        m_clipY2 = wxMin( m_clipY2, (y + h) );
-    }
-    else
-    {
-        m_clipping = true;
 
-        m_clipX1 = x;
-        m_clipY1 = y;
-        m_clipX2 = x + w;
-        m_clipY2 = y + h;
-    }
+    wxDCImpl::DoSetClippingRegion(x, y, w, h);
 }
 
 void wxGCDCImpl::DoSetDeviceClippingRegion( const wxRegion &region )
@@ -430,6 +405,16 @@ void wxGCDCImpl::ComputeScaleAndOrigin()
     }
 }
 
+void* wxGCDCImpl::GetHandle() const
+{
+    void* cgctx = NULL;
+    wxGraphicsContext* gc = GetGraphicsContext();
+    if (gc) {
+        cgctx = gc->GetNativeContext();
+    }
+    return cgctx;
+}
+
 void wxGCDCImpl::SetPalette( const wxPalette& WXUNUSED(palette) )
 {
 
@@ -445,10 +430,7 @@ void wxGCDCImpl::SetFont( const wxFont &font )
     m_font = font;
     if ( m_graphicContext )
     {
-        wxFont f = font;
-        if ( f.IsOk() )
-            f.SetPointSize( /*LogicalToDeviceYRel*/(font.GetPointSize()));
-        m_graphicContext->SetFont( f, m_textForegroundColour );
+        m_graphicContext->SetFont(font, m_textForegroundColour);
     }
 }
 
@@ -1050,7 +1032,10 @@ void wxGCDCImpl::Clear(void)
     m_graphicContext->SetPen( p );
     wxCompositionMode formerMode = m_graphicContext->GetCompositionMode();
     m_graphicContext->SetCompositionMode(wxCOMPOSITION_SOURCE);
-    DoDrawRectangle( 0, 0, INT_MAX , INT_MAX );
+    // maximum positive coordinate Cairo can handle is 2^23 - 1
+    DoDrawRectangle(
+        DeviceToLogicalX(0), DeviceToLogicalY(0),
+        DeviceToLogicalXRel(0x007fffff), DeviceToLogicalYRel(0x007fffff));
     m_graphicContext->SetCompositionMode(formerMode);
     m_graphicContext->SetPen( m_pen );
     m_graphicContext->SetBrush( m_brush );

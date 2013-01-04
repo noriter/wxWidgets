@@ -1602,6 +1602,56 @@ wxDateTime& wxDateTime::Add(const wxDateSpan& diff)
     return *this;
 }
 
+wxDateSpan wxDateTime::DiffAsDateSpan(const wxDateTime& dt) const
+{
+    wxASSERT_MSG( IsValid() && dt.IsValid(), wxT("invalid wxDateTime"));
+
+    // If dt is larger than this, calculations below needs to be inverted.
+    int inv = 1;
+    if ( dt > *this )
+        inv = -1;
+
+    int y = GetYear() - dt.GetYear();
+    int m = GetMonth() - dt.GetMonth();
+    int d = GetDay() - dt.GetDay();
+
+    // If month diff is negative, dt is the year before, so decrease year
+    // and set month diff to its inverse, e.g. January - December should be 1,
+    // not -11.
+    if ( m * inv < 0 || (m == 0 && d * inv < 0))
+    {
+        m += inv * MONTHS_IN_YEAR;
+        y -= inv;
+    }
+
+    // Same logic for days as for months above.
+    if ( d * inv < 0 )
+    {
+        // Use number of days in month from the month which end date we're
+        // crossing. That is month before this for positive diff, and this
+        // month for negative diff.
+        // If we're on january and using previous month, we get december
+        // previous year, but don't care, december has same amount of days
+        // every year.
+        wxDateTime::Month monthfordays = GetMonth();
+        if (inv > 0 && monthfordays == wxDateTime::Jan)
+            monthfordays = wxDateTime::Dec;
+        else if (inv > 0)
+            monthfordays = static_cast<wxDateTime::Month>(monthfordays - 1);
+
+        d += inv * wxDateTime::GetNumberOfDays(monthfordays, GetYear());
+        m -= inv;
+    }
+
+    int w =  d / DAYS_PER_WEEK;
+
+    // Remove weeks from d, since wxDateSpan only keep days as the ones
+    // not in complete weeks
+    d -= w * DAYS_PER_WEEK;
+
+    return wxDateSpan(y, m, w, d);
+}
+
 // ----------------------------------------------------------------------------
 // Weekday and monthday stuff
 // ----------------------------------------------------------------------------

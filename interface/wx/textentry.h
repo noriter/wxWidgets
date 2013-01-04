@@ -430,6 +430,13 @@ public:
     virtual void SelectAll();
 
     /**
+        Deselects selected text in the control.
+
+        @since 2.9.5
+    */
+    virtual void SelectNone();
+
+    /**
         Sets a hint shown in an empty unfocused text control.
 
         The hints are usually used to indicate to the user what is supposed to
@@ -455,6 +462,10 @@ public:
             or others which use them internally (e.g. Clear()). In other words,
             currently you should avoid calling methods such as WriteText() or
             Replace() when using hints and the text control is empty.
+
+        @remarks Hints can only be used for single line text controls,
+            native multi-line text controls don't support hints under any
+            platform and hence wxWidgets doesn't provide them neither.
 
         @since 2.9.0
      */

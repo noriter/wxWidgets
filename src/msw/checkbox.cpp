@@ -104,7 +104,18 @@ bool wxCheckBox::Create(wxWindow *parent,
     if ( !CreateControl(parent, id, pos, size, style, validator, name) )
         return false;
 
-    long msStyle = WS_TABSTOP;
+    WXDWORD exstyle;
+    WXDWORD msStyle = MSWGetStyle(style, &exstyle);
+
+    msStyle |= wxMSWButton::GetMultilineStyle(label);
+
+    return MSWCreateControl(wxT("BUTTON"), msStyle, pos, size, label, exstyle);
+}
+
+WXDWORD wxCheckBox::MSWGetStyle(long style, WXDWORD *exstyle) const
+{
+    // buttons never have an external border, they draw their own one
+    WXDWORD msStyle = wxControl::MSWGetStyle(style, exstyle);
 
     if ( style & wxCHK_3STATE )
         msStyle |= BS_3STATE;
@@ -116,16 +127,14 @@ bool wxCheckBox::Create(wxWindow *parent,
         msStyle |= BS_LEFTTEXT | BS_RIGHT;
     }
 
-    msStyle |= wxMSWButton::GetMultilineStyle(label);
-
-    return MSWCreateControl(wxT("BUTTON"), msStyle, pos, size, label, 0);
+    return msStyle;
 }
 
 // ----------------------------------------------------------------------------
 // wxCheckBox geometry
 // ----------------------------------------------------------------------------
 
-wxSize wxCheckBox::DoGetBestSize() const
+wxSize wxCheckBox::DoGetBestClientSize() const
 {
     static int s_checkSize = 0;
 
@@ -273,7 +282,7 @@ bool wxCheckBox::SetForegroundColour(const wxColour& colour)
     // the only way to change the checkbox foreground colour under Windows XP
     // is to owner draw it
     if ( wxUxThemeEngine::GetIfActive() )
-        MakeOwnerDrawn(colour.IsOk());
+        MSWMakeOwnerDrawn(colour.IsOk());
 
     return true;
 }
@@ -284,7 +293,7 @@ bool wxCheckBox::IsOwnerDrawn() const
         (::GetWindowLong(GetHwnd(), GWL_STYLE) & BS_OWNERDRAW) == BS_OWNERDRAW;
 }
 
-void wxCheckBox::MakeOwnerDrawn(bool ownerDrawn)
+void wxCheckBox::MSWMakeOwnerDrawn(bool ownerDrawn)
 {
     long style = ::GetWindowLong(GetHwnd(), GWL_STYLE);
 

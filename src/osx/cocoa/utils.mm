@@ -71,7 +71,7 @@ void wxBell()
     const size_t count = [fileNames count];
     for (i = 0; i < count; i++)
     {
-        fileList.Add( wxCFStringRef::AsString([fileNames objectAtIndex:i]) );
+        fileList.Add( wxCFStringRef::AsStringWithNormalizationFormC([fileNames objectAtIndex:i]) );
     }
 
     wxTheApp->MacOpenFiles(fileList);
@@ -237,16 +237,46 @@ void wxBell()
 }
 @end
 
-wxNSAppController* appcontroller = nil;
+// here we subclass NSApplication, for the purpose of being able to override sendEvent.
+@interface wxNSApplication : NSApplication
+{
+}
+
+- (void)sendEvent:(NSEvent *)anEvent;
+
+@end
+
+@implementation wxNSApplication
+
+/* This is needed because otherwise we don't receive any key-up events for command-key
+ combinations (an AppKit bug, apparently)			*/
+- (void)sendEvent:(NSEvent *)anEvent
+{
+    if ([anEvent type] == NSKeyUp && ([anEvent modifierFlags] & NSCommandKeyMask))
+        [[self keyWindow] sendEvent:anEvent];
+    else [super sendEvent:anEvent];
+}
+
+@end
+
+WX_NSObject appcontroller = nil;
+
+NSLayoutManager* gNSLayoutManager = nil;
+
+WX_NSObject wxApp::OSXCreateAppController()
+{
+    return [[wxNSAppController alloc] init];
+}
 
 bool wxApp::DoInitGui()
 {
     wxMacAutoreleasePool pool;
-    [NSApplication sharedApplication];
 
     if (!sm_isEmbedded)
     {
-        appcontroller = [[wxNSAppController alloc] init];
+        [wxNSApplication sharedApplication];
+
+        appcontroller = OSXCreateAppController();
         [NSApp setDelegate:appcontroller];
 
         // calling finishLaunching so early before running the loop seems to trigger some 'MenuManager compatibility' which leads
@@ -255,6 +285,8 @@ bool wxApp::DoInitGui()
         [NSApp finishLaunching];
 #endif
     }
+    gNSLayoutManager = [[NSLayoutManager alloc] init];
+    
     return true;
 }
 
@@ -265,6 +297,11 @@ void wxApp::DoCleanUp()
         [NSApp setDelegate:nil];
         [appcontroller release];
         appcontroller = nil;
+    }
+    if ( gNSLayoutManager != nil )
+    {
+        [gNSLayoutManager release];
+        gNSLayoutManager = nil;
     }
 }
 

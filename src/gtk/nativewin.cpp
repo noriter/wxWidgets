@@ -96,7 +96,11 @@ bool wxNativeContainerWindow::Create(wxNativeContainerWindowId anid)
 {
     bool rc;
 #ifdef __WXGTK3__
+#ifdef GDK_WINDOWING_X11
     GdkWindow * const win = gdk_x11_window_foreign_new_for_display(gdk_display_get_default(), anid);
+#else
+    GdkWindow * const win = NULL;
+#endif
 #else
     GdkWindow * const win = gdk_window_foreign_new(anid);
 #endif
@@ -121,6 +125,7 @@ void wxNativeContainerWindow::OnNativeDestroyed()
     // because it's a private GDK function and calling normal
     // gdk_window_destroy() results in X errors while nulling just the window
     // pointer and destroying m_widget results in many GTK errors
+    GTKDisconnect(m_widget);
     m_widget = NULL;
 
     // notice that we intentionally don't use Close() nor Delete() here as our

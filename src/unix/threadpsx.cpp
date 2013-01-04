@@ -54,6 +54,10 @@
     #include <thread.h>
 #endif
 
+#ifdef HAVE_ABI_FORCEDUNWIND
+    #include <cxxabi.h>
+#endif
+
 // we use wxFFile under Linux in GetCPUCount()
 #ifdef __LINUX__
     #include "wx/ffile.h"
@@ -857,6 +861,18 @@ void *wxThreadInternal::PthreadStart(wxThread *thread)
                        wxT("Thread %p Entry() returned %lu."),
                        THR_ID(pthread), wxPtrToUInt(pthread->m_exitcode));
         }
+#ifdef HAVE_ABI_FORCEDUNWIND
+        // When using common C++ ABI under Linux we must always rethrow this
+        // special exception used to unwind the stack when the thread was
+        // cancelled, otherwise the thread library would simply terminate the
+        // program, see http://udrepper.livejournal.com/21541.html
+        catch ( abi::__forced_unwind& )
+        {
+            wxCriticalSectionLocker lock(thread->m_critsect);
+            pthread->SetState(STATE_EXITED);
+            throw;
+        }
+#endif // HAVE_ABI_FORCEDUNWIND
         wxCATCH_ALL( wxTheApp->OnUnhandledException(); )
 
         {
@@ -1837,7 +1853,7 @@ static void DeleteThread(wxThread *This)
     }
 }
 
-#ifndef __WXOSX__
+#ifndef __DARWIN__
 
 void wxMutexGuiEnterImpl()
 {

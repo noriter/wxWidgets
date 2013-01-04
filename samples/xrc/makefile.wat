@@ -38,6 +38,10 @@ PORTNAME = base
 !ifeq USE_GUI 1
 PORTNAME = msw
 !endif
+COMPILER_VERSION =
+!ifeq OFFICIAL_BUILD 1
+COMPILER_VERSION = ERROR-COMPILER-VERSION-MUST-BE-SET-FOR-OFFICIAL-BUILD
+!endif
 WXDEBUGFLAG =
 !ifeq BUILD debug
 WXDEBUGFLAG = d
@@ -136,6 +140,11 @@ __EXCEPTIONSFLAG_8 =
 !endif
 !ifeq USE_EXCEPTIONS 1
 __EXCEPTIONSFLAG_8 = -xs
+!endif
+__WXLIB_RIBBON_p =
+!ifeq MONOLITHIC 0
+__WXLIB_RIBBON_p = &
+	wx$(PORTNAME)$(WXUNIVNAME)$(WX_RELEASE_NODOT)$(WXUNICODEFLAG)$(WXDEBUGFLAG)$(WX_LIB_FLAVOUR)_ribbon.lib
 !endif
 __WXLIB_XRC_p =
 !ifeq MONOLITHIC 0
@@ -237,8 +246,9 @@ __DLLFLAG_p = -dWXUSINGDLL
 WX_RELEASE_NODOT = 29
 COMPILER_PREFIX = wat
 OBJS = &
-	$(COMPILER_PREFIX)_$(PORTNAME)$(WXUNIVNAME)$(WXUNICODEFLAG)$(WXDEBUGFLAG)$(WXDLLFLAG)$(CFG)
-LIBDIRNAME = .\..\..\lib\$(COMPILER_PREFIX)_$(LIBTYPE_SUFFIX)$(CFG)
+	$(COMPILER_PREFIX)$(COMPILER_VERSION)_$(PORTNAME)$(WXUNIVNAME)$(WXUNICODEFLAG)$(WXDEBUGFLAG)$(WXDLLFLAG)$(CFG)
+LIBDIRNAME = &
+	.\..\..\lib\$(COMPILER_PREFIX)$(COMPILER_VERSION)_$(LIBTYPE_SUFFIX)$(CFG)
 SETUPHDIR = &
 	$(LIBDIRNAME)\$(PORTNAME)$(WXUNIVNAME)$(WXUNICODEFLAG)$(WXDEBUGFLAG)
 XRCDEMO_CXXFLAGS = $(__DEBUGINFO_0) $(__OPTIMIZEFLAG_2) $(__THREADSFLAG_5) &
@@ -279,7 +289,7 @@ $(OBJS)\xrcdemo.exe :  $(XRCDEMO_OBJECTS) $(OBJS)\xrcdemo_sample.res
 	@%append $(OBJS)\xrcdemo.lbc option caseexact
 	@%append $(OBJS)\xrcdemo.lbc  $(__DEBUGINFO_1)  libpath $(LIBDIRNAME) system nt_win ref '_WinMain@16' $(____CAIRO_LIBDIR_FILENAMES_p) $(LDFLAGS)
 	@for %i in ($(XRCDEMO_OBJECTS)) do @%append $(OBJS)\xrcdemo.lbc file %i
-	@for %i in ( $(__WXLIB_XRC_p)  $(__WXLIB_HTML_p)  $(__WXLIB_ADV_p)  $(__WXLIB_CORE_p)  $(__WXLIB_XML_p)  $(__WXLIB_BASE_p)  $(__WXLIB_MONO_p) $(__LIB_TIFF_p) $(__LIB_JPEG_p) $(__LIB_PNG_p)  wxzlib$(WXDEBUGFLAG).lib wxregex$(WXUNICODEFLAG)$(WXDEBUGFLAG).lib wxexpat$(WXDEBUGFLAG).lib $(EXTRALIBS_FOR_BASE)  $(__CAIRO_LIB_p) kernel32.lib user32.lib gdi32.lib comdlg32.lib winspool.lib winmm.lib shell32.lib comctl32.lib ole32.lib oleaut32.lib uuid.lib rpcrt4.lib advapi32.lib wsock32.lib wininet.lib) do @%append $(OBJS)\xrcdemo.lbc library %i
+	@for %i in ( $(__WXLIB_RIBBON_p)  $(__WXLIB_XRC_p)  $(__WXLIB_HTML_p)  $(__WXLIB_ADV_p)  $(__WXLIB_CORE_p)  $(__WXLIB_XML_p)  $(__WXLIB_BASE_p)  $(__WXLIB_MONO_p) $(__LIB_TIFF_p) $(__LIB_JPEG_p) $(__LIB_PNG_p)  wxzlib$(WXDEBUGFLAG).lib wxregex$(WXUNICODEFLAG)$(WXDEBUGFLAG).lib wxexpat$(WXDEBUGFLAG).lib $(EXTRALIBS_FOR_BASE)  $(__CAIRO_LIB_p) kernel32.lib user32.lib gdi32.lib comdlg32.lib winspool.lib winmm.lib shell32.lib comctl32.lib ole32.lib oleaut32.lib uuid.lib rpcrt4.lib advapi32.lib wsock32.lib wininet.lib) do @%append $(OBJS)\xrcdemo.lbc library %i
 	@%append $(OBJS)\xrcdemo.lbc option resource=$(OBJS)\xrcdemo_sample.res
 	@for %i in () do @%append $(OBJS)\xrcdemo.lbc option stack=%i
 	wlink @$(OBJS)\xrcdemo.lbc

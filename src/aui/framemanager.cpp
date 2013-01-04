@@ -3236,16 +3236,16 @@ bool wxAuiManager::DoDrop(wxAuiDockInfoArray& docks,
         // determine the mouse offset and the pane size, both in the
         // direction of the dock itself, and perpendicular to the dock
 
-        int offset, size;
+        int mouseOffset, size;
 
         if (part->orientation == wxVERTICAL)
         {
-            offset = pt.y - part->rect.y;
+            mouseOffset = pt.y - part->rect.y;
             size = part->rect.GetHeight();
         }
         else
         {
-            offset = pt.x - part->rect.x;
+            mouseOffset = pt.x - part->rect.x;
             size = part->rect.GetWidth();
         }
 
@@ -3253,7 +3253,7 @@ bool wxAuiManager::DoDrop(wxAuiDockInfoArray& docks,
 
         // if we are in the top/left part of the pane,
         // insert the pane before the pane being hovered over
-        if (offset <= size/2)
+        if (mouseOffset <= size/2)
         {
             drop_position = part->pane->dock_pos;
             DoInsertPane(panes,
@@ -3265,7 +3265,7 @@ bool wxAuiManager::DoDrop(wxAuiDockInfoArray& docks,
 
         // if we are in the bottom/right part of the pane,
         // insert the pane before the pane being hovered over
-        if (offset > size/2)
+        if (mouseOffset > size/2)
         {
             drop_position = part->pane->dock_pos+1;
             DoInsertPane(panes,
@@ -3367,15 +3367,15 @@ void wxAuiManager::ShowHint(const wxRect& rect)
                     pane.frame &&
                         pane.frame->IsShown())
             {
-                wxRect rect = pane.frame->GetRect();
+                wxRect r = pane.frame->GetRect();
 #ifdef __WXGTK__
                 // wxGTK returns the client size, not the whole frame size
-                rect.width += 15;
-                rect.height += 35;
-                rect.Inflate(5);
+                r.width += 15;
+                r.height += 35;
+                r.Inflate(5);
 #endif
 
-                clip.Subtract(rect);
+                clip.Subtract(r);
             }
         }
 
@@ -4658,8 +4658,8 @@ void wxAuiManager::OnMotion(wxMouseEvent& event)
 
         pane.SetFlag(wxAuiPaneInfo::actionPane, true);
 
-        wxPoint pt = event.GetPosition();
-        DoDrop(m_docks, m_panes, pane, pt, m_actionOffset);
+        wxPoint point = event.GetPosition();
+        DoDrop(m_docks, m_panes, pane, point, m_actionOffset);
 
         // if DoDrop() decided to float the pane, set up
         // the floating pane's initial position
@@ -4793,7 +4793,7 @@ void wxAuiManager::OnPaneButton(wxAuiManagerEvent& evt)
     }
     else if (evt.button == wxAUI_BUTTON_MAXIMIZE_RESTORE && !pane.IsMaximized())
     {
-        // fire pane close event
+        // fire pane maximize event
         wxAuiManagerEvent e(wxEVT_AUI_PANE_MAXIMIZE);
         e.SetManager(this);
         e.SetPane(evt.pane);
@@ -4807,7 +4807,7 @@ void wxAuiManager::OnPaneButton(wxAuiManagerEvent& evt)
     }
     else if (evt.button == wxAUI_BUTTON_MAXIMIZE_RESTORE && pane.IsMaximized())
     {
-        // fire pane close event
+        // fire pane restore event
         wxAuiManagerEvent e(wxEVT_AUI_PANE_RESTORE);
         e.SetManager(this);
         e.SetPane(evt.pane);
@@ -4819,11 +4819,29 @@ void wxAuiManager::OnPaneButton(wxAuiManagerEvent& evt)
             Update();
         }
     }
-    else if (evt.button == wxAUI_BUTTON_PIN)
+    else if (evt.button == wxAUI_BUTTON_PIN &&
+                (m_flags & wxAUI_MGR_ALLOW_FLOATING) && pane.IsFloatable())
     {
-        if ((m_flags & wxAUI_MGR_ALLOW_FLOATING) &&
-            pane.IsFloatable())
-                pane.Float();
+        if (pane.IsMaximized())
+        {
+            // If the pane is maximized, the original state must be restored
+            // before trying to float the pane, otherwise the other panels
+            // wouldn't appear correctly when it becomes floating.
+            wxAuiManagerEvent e(wxEVT_AUI_PANE_RESTORE);
+            e.SetManager(this);
+            e.SetPane(evt.pane);
+            ProcessMgrEvent(e);
+
+            if (e.GetVeto())
+            {
+                // If it can't be restored, it can't be floated neither.
+                return;
+            }
+
+            RestorePane(pane);
+        }
+
+        pane.Float();
         Update();
     }
 }

@@ -18,8 +18,10 @@ from fileinput import FileInput
 
 IFACE         = os.path.abspath('./scintilla/include/Scintilla.iface')
 H_TEMPLATE    = os.path.abspath('./stc.h.in')
+IH_TEMPLATE   = os.path.abspath('./stc.interface.h.in')
 CPP_TEMPLATE  = os.path.abspath('./stc.cpp.in')
 H_DEST        = os.path.abspath('../../include/wx/stc/stc.h')
+IH_DEST       = os.path.abspath('../../interface/wx/stc/stc.h')
 CPP_DEST      = os.path.abspath('./stc.cpp')
 if len(sys.argv) > 1 and sys.argv[1] == '--wxpython':
     DOCSTR_DEST   = os.path.abspath('../../../wxPython/src/_stc_gendocs.i')
@@ -52,6 +54,8 @@ cmdValues = [ 2011,
               (2426, 2442),
               (2450, 2455),
               2518,
+              (2619, 2621),
+              (2628, 2629)
             ]
 
 
@@ -180,6 +184,7 @@ methodOverrideMap = {
 
     'MarkerSetFore' : ('MarkerSetForeground', 0, 0, 0),
     'MarkerSetBack' : ('MarkerSetBackground', 0, 0, 0),
+    'MarkerSetBackSelected' : ('MarkerSetBackgroundSelected', 0,0,0),
 
     'MarkerSymbolDefined' : ('GetMarkerSymbolDefined', 0, 0, 0),
 
@@ -231,7 +236,9 @@ methodOverrideMap = {
     'GetMarginMaskN' : ('GetMarginMask', 0, 0, 0),
     'SetMarginSensitiveN' : ('SetMarginSensitive', 0, 0, 0),
     'GetMarginSensitiveN' : ('GetMarginSensitive', 0, 0, 0),
-
+    'SetMarginCursorN' : ('SetMarginCursor', 0, 0, 0),
+    'GetMarginCursorN' : ('GetMarginCursor', 0, 0, 0),
+    
     'MarginGetText' :
     (0,
     'wxString %s(int line) const;',
@@ -355,6 +362,8 @@ methodOverrideMap = {
 
     'IndicSetAlpha' : ('IndicatorSetAlpha', 0, 0, 0),
     'IndicGetAlpha' : ('IndicatorGetAlpha', 0, 0, 0),
+    'IndicSetOutlineAlpha' : ('IndicatorSetOutlineAlpha', 0, 0, 0),
+    'IndicGetOutlineAlpha' : ('IndicatorGetOutlineAlpha', 0, 0, 0),
     'IndicSetStyle' : ('IndicatorSetStyle', 0, 0, 0),
     'IndicGetStyle' : ('IndicatorGetStyle', 0, 0, 0),
     'IndicSetFore' : ('IndicatorSetForeground', 0, 0, 0),
@@ -394,6 +403,8 @@ methodOverrideMap = {
     'AutoCSetMaxHeight'     : ('AutoCompSetMaxHeight', 0, 0, 0),
     'AutoCGetMaxHeight'     : ('AutoCompGetMaxHeight', 0, 0, 0),
     'AutoCGetMaxHeight'     : ('AutoCompGetMaxHeight', 0, 0, 0),
+    'AutoCSetCaseInsensitiveBehaviour'     : ('AutoCompSetCaseInsensitiveBehaviour', 0, 0, 0),
+    'AutoCGetCaseInsensitiveBehaviour'     : ('AutoCompGetCaseInsensitiveBehaviour', 0, 0, 0),
 
     'RegisterImage' :
     (0,
@@ -729,12 +740,181 @@ methodOverrideMap = {
     'SetSelection' : (None, 0, 0, 0),
 
     'GetCharacterPointer' : (0,
-                             'const char* %s();',
-                             'const char* %s() {\n'
+                             'const char* %s() const;',
+                             'const char* %s() const {\n'
                              '    return (const char*)SendMsg(%s, 0, 0);',
                              0),
     
+    'GetRangePointer' : (0,
+                             'const char* %s(int position, int rangeLength) const;',
+                             'const char* %s(int position, int rangeLength) const {\n'
+                             '    return (const char*)SendMsg(%s, position, rangeLength);',
+                             0),
+    
 
+    'GetWordChars' :
+    (0,
+     'wxString %s() const;',
+
+     '''wxString %s() const {
+         int msg = %s;
+         int len = SendMsg(msg, 0, (sptr_t)NULL);
+         if (!len) return wxEmptyString;
+
+         wxMemoryBuffer mbuf(len+1);
+         char* buf = (char*)mbuf.GetWriteBuf(len+1);
+         SendMsg(msg, 0, (sptr_t)buf);
+         mbuf.UngetWriteBuf(len);
+         mbuf.AppendByte(0);
+         return stc2wx(buf);''',
+
+     ('Get the set of characters making up words for when moving or selecting by word.',)),
+
+    'GetTag' :
+    (0,
+     'wxString %s(int tagNumber) const;',
+
+     '''wxString %s(int tagNumber) const {
+         int msg = %s;
+         int len = SendMsg(msg, tagNumber, (sptr_t)NULL);
+         if (!len) return wxEmptyString;
+
+         wxMemoryBuffer mbuf(len+1);
+         char* buf = (char*)mbuf.GetWriteBuf(len+1);
+         SendMsg(msg, tagNumber, (sptr_t)buf);
+         mbuf.UngetWriteBuf(len);
+         mbuf.AppendByte(0);
+         return stc2wx(buf);''',
+     0),
+
+    'GetWhitespaceChars' :
+    (0,
+     'wxString %s() const;',
+
+     '''wxString %s() const {
+         int msg = %s;
+         int len = SendMsg(msg, 0, (sptr_t)NULL);
+         if (!len) return wxEmptyString;
+
+         wxMemoryBuffer mbuf(len+1);
+         char* buf = (char*)mbuf.GetWriteBuf(len+1);
+         SendMsg(msg, 0, (sptr_t)buf);
+         mbuf.UngetWriteBuf(len);
+         mbuf.AppendByte(0);
+         return stc2wx(buf);''',
+     0),
+
+
+    'GetPunctuationChars' :
+    (0,
+     'wxString %s() const;',
+
+     '''wxString %s() const {
+         int msg = %s;
+         int len = SendMsg(msg, 0, (sptr_t)NULL);
+         if (!len) return wxEmptyString;
+
+         wxMemoryBuffer mbuf(len+1);
+         char* buf = (char*)mbuf.GetWriteBuf(len+1);
+         SendMsg(msg, 0, (sptr_t)buf);
+         mbuf.UngetWriteBuf(len);
+         mbuf.AppendByte(0);
+         return stc2wx(buf);''',
+     0),
+
+
+    'PropertyNames' :
+    (0,
+     'wxString %s() const;',
+
+     '''wxString %s() const {
+         int msg = %s;
+         int len = SendMsg(msg, 0, (sptr_t)NULL);
+         if (!len) return wxEmptyString;
+
+         wxMemoryBuffer mbuf(len+1);
+         char* buf = (char*)mbuf.GetWriteBuf(len+1);
+         SendMsg(msg, 0, (sptr_t)buf);
+         mbuf.UngetWriteBuf(len);
+         mbuf.AppendByte(0);
+         return stc2wx(buf);''',
+     0),
+
+
+
+    'DescribeProperty' :
+    (0,
+     'wxString %s(const wxString& name) const;',
+
+     '''wxString %s(const wxString& name) const {
+         int msg = %s;
+         int len = SendMsg(msg, (sptr_t)(const char*)wx2stc(name), (sptr_t)NULL);
+         if (!len) return wxEmptyString;
+
+         wxMemoryBuffer mbuf(len+1);
+         char* buf = (char*)mbuf.GetWriteBuf(len+1);
+         SendMsg(msg, (sptr_t)(const char*)wx2stc(name), (sptr_t)buf);
+         mbuf.UngetWriteBuf(len);
+         mbuf.AppendByte(0);
+         return stc2wx(buf);''',
+     0),
+
+
+
+    'DescribeKeyWordSets' :
+    (0,
+     'wxString %s() const;',
+
+     '''wxString %s() const {
+         int msg = %s;
+         int len = SendMsg(msg, 0, (sptr_t)NULL);
+         if (!len) return wxEmptyString;
+
+         wxMemoryBuffer mbuf(len+1);
+         char* buf = (char*)mbuf.GetWriteBuf(len+1);
+         SendMsg(msg, 0, (sptr_t)buf);
+         mbuf.UngetWriteBuf(len);
+         mbuf.AppendByte(0);
+         return stc2wx(buf);''',
+     0),
+     
+
+    'MarkerDefineRGBAImage' :
+    (0,
+    'void %s(int markerNumber, const unsigned char* pixels);',
+    '''void %s(int markerNumber, const unsigned char* pixels) {
+           SendMsg(%s, markerNumber, (sptr_t)pixels);''',
+    0),
+
+
+    'RegisterRGBAImage' :
+    (0,
+    'void %s(int type, const unsigned char* pixels);',
+    '''void %s(int type, const unsigned char* pixels) {
+           SendMsg(%s, type, (sptr_t)pixels);''',
+    0),
+
+
+    # I think these are only available on the native OSX backend, so
+    # don't add them to the wx API...
+    'FindIndicatorShow' : (None, 0,0,0),
+    'FindIndicatorFlash' : (None, 0,0,0),
+    'FindIndicatorHide' : (None, 0,0,0),
+
+    'CreateLoader' :
+    (0,
+     'void* %s(int bytes) const;',
+     """void* %s(int bytes) const {
+         return (void*)(sptr_t)SendMsg(%s, bytes); """,
+     0),
+
+     'PrivateLexerCall' :
+     (0,
+      'void* %s(int operation, void* pointer);',
+      """void* %s(int operation, void* pointer) {
+           return (void*)(sptr_t)SendMsg(%s, operation, (sptr_t)pointer); """,
+      0),
+    
     '' : ('', 0, 0, 0),
 
     }
@@ -754,7 +934,7 @@ constNonGetterMethods = (
 
 #----------------------------------------------------------------------------
 
-def processIface(iface, h_tmplt, cpp_tmplt, h_dest, cpp_dest, docstr_dest):
+def processIface(iface, h_tmplt, cpp_tmplt, ih_tmplt, h_dest, cpp_dest, docstr_dest, ih_dest):
     curDocStrings = []
     values = []
     methods = []
@@ -801,23 +981,26 @@ def processIface(iface, h_tmplt, cpp_tmplt, h_dest, cpp_dest, docstr_dest):
     data = {}
     data['VALUES'] = processVals(values)
     data['CMDS']   = processVals(cmds)
-    defs, imps, docstrings = processMethods(methods)
+    defs, imps, docstrings, idefs = processMethods(methods)
     data['METHOD_DEFS'] = defs
+    data['METHOD_IDEFS'] = idefs
     data['METHOD_IMPS'] = imps
 
     # get template text
     h_text = open(h_tmplt).read()
+    ih_text = open(ih_tmplt).read()
     cpp_text = open(cpp_tmplt).read()
 
     # do the substitutions
     h_text = h_text % data
     cpp_text = cpp_text % data
+    ih_text = ih_text % data
 
     # write out destination files
     open(h_dest, 'w').write(h_text)
     open(cpp_dest, 'w').write(cpp_text)
     open(docstr_dest, 'w').write(docstrings)
-
+    open(ih_dest, 'w').write(ih_text)
 
 
 def joinWithNewLines(values):
@@ -831,7 +1014,7 @@ def processVals(values):
         if docs:
             text.append('')
             for x in docs:
-                text.append('// ' + x)
+                text.append('/// ' + x)
         text.append('#define %s %s' % (name, value))
     return joinWithNewLines(text)
 
@@ -839,6 +1022,7 @@ def processVals(values):
 
 def processMethods(methods):
     defs = []
+    idefs = []
     imps = []
     dstr = []
 
@@ -868,6 +1052,18 @@ def processMethods(methods):
             theDef = theDef + ';'
         defs.append(theDef)
 
+        # Build the method definition for the interface .h file
+        if docs:
+            idefs.append('')
+            idefs.append('    /**')
+            for x in docs:
+                idefs.append('        ' + x)
+            idefs.append('    */')
+        if name == 'GetCurLine':
+            idefs.append('    wxString GetCurLine(int* linePos=NULL);')
+        else:
+            idefs.append(theDef)
+                     
         # Build the method implementation string
         if docs:
             imps.append('')
@@ -894,7 +1090,7 @@ def processMethods(methods):
         imps.append(theImp)
 
 
-    return joinWithNewLines(defs), joinWithNewLines(imps), joinWithNewLines(dstr)
+    return joinWithNewLines(defs), joinWithNewLines(imps), joinWithNewLines(dstr), joinWithNewLines(idefs)
 
 
 #----------------------------------------------------------------------------
@@ -1019,7 +1215,7 @@ def main(args):
         sys.exit(1)
 
     # Now just do it
-    processIface(IFACE, H_TEMPLATE, CPP_TEMPLATE, H_DEST, CPP_DEST, DOCSTR_DEST)
+    processIface(IFACE, H_TEMPLATE, CPP_TEMPLATE, IH_TEMPLATE, H_DEST, CPP_DEST, DOCSTR_DEST, IH_DEST)
 
 
 

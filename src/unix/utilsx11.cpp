@@ -38,8 +38,13 @@
 
 #ifdef __WXGTK__
 #include <gdk/gdk.h>
+#ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
+#endif
+
+// Only X11 backend is supported for wxGTK here
+#if !defined(__WXGTK__) || defined(GDK_WINDOWING_X11)
 
 // Various X11 Atoms used in this file:
 static Atom _NET_WM_STATE = 0;
@@ -848,6 +853,8 @@ bool wxGetKeyState(wxKeyCode key)
     XQueryKeymap(pDisplay, key_vector);
     return key_vector[keyCode >> 3] & (1 << (keyCode & 7));
 }
+
+#endif // !defined(__WXGTK__) || defined(GDK_WINDOWING_X11)
 
 // ----------------------------------------------------------------------------
 // Launch document with default app

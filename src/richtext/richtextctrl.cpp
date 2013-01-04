@@ -1130,82 +1130,8 @@ void wxRichTextCtrl::OnChar(wxKeyEvent& event)
         // Must process this before translation, otherwise it's translated into a WXK_DELETE event.
         if (event.CmdDown() && event.GetKeyCode() == WXK_BACK)
         {
-            if (!IsEditable())
-            {
+            if (!ProcessBackKey(event, flags))
                 return;
-            }
-
-            if (HasSelection() && !CanDeleteRange(* GetFocusObject(), GetSelectionRange()))
-            {
-                return;
-            }
-
-            BeginBatchUndo(_("Delete Text"));
-
-            long newPos = m_caretPosition;
-
-            bool processed = DeleteSelectedContent(& newPos);
-
-            int deletions = 0;
-            if (processed)
-                deletions ++;
-
-            // Submit range in character positions, which are greater than caret positions,
-            // so subtract 1 for deleted character and add 1 for conversion to character position.
-            if (newPos > -1)
-            {
-                if (event.CmdDown())
-                {
-                    long pos = wxRichTextCtrl::FindNextWordPosition(-1);
-                    if (pos < newPos)
-                    {
-                        wxRichTextRange range(pos+1, newPos);
-                        if (CanDeleteRange(* GetFocusObject(), range.FromInternal()))
-                        {
-                            GetFocusObject()->DeleteRangeWithUndo(range, this, & GetBuffer());
-                            deletions ++;
-                        }
-                        processed = true;
-                    }
-                }
-
-                if (!processed)
-                {
-                    wxRichTextRange range(newPos, newPos);
-                    if (CanDeleteRange(* GetFocusObject(), range.FromInternal()))
-                    {
-                        GetFocusObject()->DeleteRangeWithUndo(range, this, & GetBuffer());
-                        deletions ++;
-                    }
-                }
-            }
-
-            EndBatchUndo();
-
-            if (GetLastPosition() == -1)
-            {
-                GetFocusObject()->Reset();
-
-                m_caretPosition = -1;
-                PositionCaret();
-                SetDefaultStyleToCursorStyle();
-            }
-
-            ScrollIntoView(m_caretPosition, WXK_LEFT);
-
-            // Always send this event; wxEVT_COMMAND_RICHTEXT_CONTENT_DELETED will be sent only if there is an actual deletion.
-            {
-                wxRichTextEvent cmdEvent(
-                    wxEVT_COMMAND_RICHTEXT_DELETE,
-                    GetId());
-                cmdEvent.SetEventObject(this);
-                cmdEvent.SetFlags(flags);
-                cmdEvent.SetPosition(m_caretPosition+1);
-                cmdEvent.SetContainer(GetFocusObject());
-                GetEventHandler()->ProcessEvent(cmdEvent);
-            }
-
-            Update();
         }
         else
             event.Skip();
@@ -1248,6 +1174,14 @@ void wxRichTextCtrl::OnChar(wxKeyEvent& event)
         else
             GetFocusObject()->InsertNewlineWithUndo(& GetBuffer(), newPos+1, this, wxRICHTEXT_INSERT_WITH_PREVIOUS_PARAGRAPH_STYLE|wxRICHTEXT_INSERT_INTERACTIVE);
 
+        // Automatically renumber list
+        bool isNumberedList = false;
+        wxRichTextRange numberedListRange = FindRangeForList(newPos+1, isNumberedList);
+        if (isNumberedList && numberedListRange != wxRichTextRange(-1, -1))
+        {
+            NumberList(numberedListRange, NULL, wxRICHTEXT_SETSTYLE_RENUMBER|wxRICHTEXT_SETSTYLE_WITH_UNDO);
+        }
+
         EndBatchUndo();
         SetDefaultStyleToCursorStyle();
 
@@ -1273,77 +1207,7 @@ void wxRichTextCtrl::OnChar(wxKeyEvent& event)
     }
     else if (event.GetKeyCode() == WXK_BACK)
     {
-        long newPos = m_caretPosition;
-
-        if (HasSelection() && !CanDeleteRange(* GetFocusObject(), GetSelectionRange()))
-        {
-            return;
-        }
-
-        BeginBatchUndo(_("Delete Text"));
-
-        bool processed = DeleteSelectedContent(& newPos);
-
-        int deletions = 0;
-        if (processed)
-            deletions ++;
-
-        // Submit range in character positions, which are greater than caret positions,
-        // so subtract 1 for deleted character and add 1 for conversion to character position.
-        if (newPos > -1)
-        {
-            if (event.CmdDown())
-            {
-                long pos = wxRichTextCtrl::FindNextWordPosition(-1);
-                if (pos < newPos)
-                {
-                    wxRichTextRange range(pos+1, newPos);
-                    if (CanDeleteRange(* GetFocusObject(), range.FromInternal()))
-                    {
-                        GetFocusObject()->DeleteRangeWithUndo(range, this, & GetBuffer());
-                        deletions ++;
-                    }
-                    processed = true;
-                }
-            }
-
-            if (!processed)
-            {
-                wxRichTextRange range(newPos, newPos);
-                if (CanDeleteRange(* GetFocusObject(), range.FromInternal()))
-                {
-                    GetFocusObject()->DeleteRangeWithUndo(range, this, & GetBuffer());
-                    deletions ++;
-                }
-            }
-        }
-
-        EndBatchUndo();
-
-        if (GetLastPosition() == -1)
-        {
-            GetFocusObject()->Reset();
-
-            m_caretPosition = -1;
-            PositionCaret();
-            SetDefaultStyleToCursorStyle();
-        }
-
-        ScrollIntoView(m_caretPosition, WXK_LEFT);
-
-        // Always send this event; wxEVT_COMMAND_RICHTEXT_CONTENT_DELETED will be sent only if there is an actual deletion.
-        {
-            wxRichTextEvent cmdEvent(
-                wxEVT_COMMAND_RICHTEXT_DELETE,
-                GetId());
-            cmdEvent.SetEventObject(this);
-            cmdEvent.SetFlags(flags);
-            cmdEvent.SetPosition(m_caretPosition+1);
-            cmdEvent.SetContainer(GetFocusObject());
-            GetEventHandler()->ProcessEvent(cmdEvent);
-        }
-
-        Update();
+        ProcessBackKey(event, flags);
     }
     else if (event.GetKeyCode() == WXK_DELETE)
     {
@@ -1528,6 +1392,122 @@ bool wxRichTextCtrl::ProcessMouseMovement(wxRichTextParagraphLayoutBox* containe
     }
     else
         return false;
+}
+
+// Processes the back key
+bool wxRichTextCtrl::ProcessBackKey(wxKeyEvent& event, int flags)
+{
+    if (!IsEditable())
+    {
+        return false;
+    }
+
+    if (HasSelection() && !CanDeleteRange(* GetFocusObject(), GetSelectionRange()))
+    {
+        return false;
+    }
+
+    wxRichTextParagraph* para = GetFocusObject()->GetParagraphAtPosition(m_caretPosition, true);
+
+    // If we're at the start of a list item with a bullet, let's 'delete' the bullet, i.e.
+    // make it a continuation paragraph.
+    if (!HasSelection() && para && ((m_caretPosition+1) == para->GetRange().GetStart()) &&
+        para->GetAttributes().HasBulletStyle() && (para->GetAttributes().GetBulletStyle() & wxTEXT_ATTR_BULLET_STYLE_CONTINUATION) == 0)
+    {
+        wxRichTextParagraph* newPara = wxDynamicCast(para->Clone(), wxRichTextParagraph);
+        newPara->GetAttributes().SetBulletStyle(newPara->GetAttributes().GetBulletStyle() | wxTEXT_ATTR_BULLET_STYLE_CONTINUATION);
+
+        wxRichTextAction* action = new wxRichTextAction(NULL, _("Remove Bullet"), wxRICHTEXT_CHANGE_STYLE, & GetBuffer(), GetFocusObject(), this);
+        action->SetRange(newPara->GetRange());
+        action->SetPosition(GetCaretPosition());
+        action->GetNewParagraphs().AppendChild(newPara);
+        // Also store the old ones for Undo
+        action->GetOldParagraphs().AppendChild(new wxRichTextParagraph(*para));
+
+        GetBuffer().Invalidate(para->GetRange());
+        GetBuffer().SubmitAction(action);
+
+        // Automatically renumber list
+        bool isNumberedList = false;
+        wxRichTextRange numberedListRange = FindRangeForList(m_caretPosition, isNumberedList);
+        if (isNumberedList && numberedListRange != wxRichTextRange(-1, -1))
+        {
+            NumberList(numberedListRange, NULL, wxRICHTEXT_SETSTYLE_RENUMBER|wxRICHTEXT_SETSTYLE_WITH_UNDO);
+        }
+
+        Update();
+    }
+    else
+    {
+        BeginBatchUndo(_("Delete Text"));
+
+        long newPos = m_caretPosition;
+
+        bool processed = DeleteSelectedContent(& newPos);
+
+        int deletions = 0;
+        if (processed)
+            deletions ++;
+
+        // Submit range in character positions, which are greater than caret positions,
+        // so subtract 1 for deleted character and add 1 for conversion to character position.
+        if (newPos > -1)
+        {
+            if (event.CmdDown())
+            {
+                long pos = wxRichTextCtrl::FindNextWordPosition(-1);
+                if (pos < newPos)
+                {
+                    wxRichTextRange range(pos+1, newPos);
+                    if (CanDeleteRange(* GetFocusObject(), range.FromInternal()))
+                    {
+                        GetFocusObject()->DeleteRangeWithUndo(range, this, & GetBuffer());
+                        deletions ++;
+                    }
+                    processed = true;
+                }
+            }
+
+            if (!processed)
+            {
+                wxRichTextRange range(newPos, newPos);
+                if (CanDeleteRange(* GetFocusObject(), range.FromInternal()))
+                {
+                    GetFocusObject()->DeleteRangeWithUndo(range, this, & GetBuffer());
+                    deletions ++;
+                }
+            }
+        }
+
+        EndBatchUndo();
+
+        if (GetLastPosition() == -1)
+        {
+            GetFocusObject()->Reset();
+
+            m_caretPosition = -1;
+            PositionCaret();
+            SetDefaultStyleToCursorStyle();
+        }
+
+        ScrollIntoView(m_caretPosition, WXK_LEFT);
+
+        // Always send this event; wxEVT_COMMAND_RICHTEXT_CONTENT_DELETED will be sent only if there is an actual deletion.
+        {
+            wxRichTextEvent cmdEvent(
+                wxEVT_COMMAND_RICHTEXT_DELETE,
+                GetId());
+            cmdEvent.SetEventObject(this);
+            cmdEvent.SetFlags(flags);
+            cmdEvent.SetPosition(m_caretPosition+1);
+            cmdEvent.SetContainer(GetFocusObject());
+            GetEventHandler()->ProcessEvent(cmdEvent);
+        }
+
+        Update();
+    }
+
+    return true;
 }
 
 /// Delete content if there is a selection, e.g. when pressing a key.
@@ -1992,7 +1972,7 @@ bool wxRichTextCtrl::MoveRight(int noPositions, int flags)
         // we want to adjust the caret position such that it is positioned at the
         // start of the next line, rather than jumping past the first character of the
         // line.
-        if (noPositions == 1 && !extendSel)
+        if (noPositions == 1)
             MoveCaretForward(oldPos);
         else
             SetCaretPosition(newPos);
@@ -2019,7 +1999,7 @@ bool wxRichTextCtrl::MoveLeft(int noPositions, int flags)
         if (!extendSel)
             SelectNone();
 
-        if (noPositions == 1 && !extendSel)
+        if (noPositions == 1)
             MoveCaretBack(oldPos);
         else
             SetCaretPosition(newPos);
@@ -2102,6 +2082,7 @@ bool wxRichTextCtrl::MoveDown(int noLines, int flags)
     wxRichTextParagraphLayoutBox* container = GetFocusObject();
     int hitTestFlags = wxRICHTEXT_HITTEST_NO_NESTED_OBJECTS|wxRICHTEXT_HITTEST_NO_FLOATING_OBJECTS|wxRICHTEXT_HITTEST_HONOUR_ATOMIC;
 
+    bool lineIsEmpty = false;
     if (notInThisObject)
     {
         // If we know we're navigating out of the current object,
@@ -2122,7 +2103,11 @@ bool wxRichTextCtrl::MoveDown(int noLines, int flags)
     {
         wxRichTextLine* lineObj = GetFocusObject()->GetLineForVisibleLineNumber(newLine);
         if (lineObj)
+        {
             pt.y = lineObj->GetAbsolutePosition().y + 2;
+            if (lineObj->GetRange().GetStart() == lineObj->GetRange().GetEnd())
+                lineIsEmpty = true;
+        }
         else
             return false;
     }
@@ -2154,6 +2139,15 @@ bool wxRichTextCtrl::MoveDown(int noLines, int flags)
         }
 
         bool caretLineStart = true;
+
+        // If the line is empty, there is only one possible position for the caret,
+        // so force the 'before' state so FindCaretPositionForCharacterPosition doesn't
+        // just return the same position.
+        if (lineIsEmpty)
+        {
+            hitTest &= ~wxRICHTEXT_HITTEST_AFTER;
+            hitTest |= wxRICHTEXT_HITTEST_BEFORE;
+        }
         long caretPosition = FindCaretPositionForCharacterPosition(newPos, hitTest, container, caretLineStart);
         long newSelEnd = caretPosition;
         bool extendSel;
@@ -2208,7 +2202,7 @@ bool wxRichTextCtrl::MoveToParagraphStart(int flags)
         if (!extendSel)
             SelectNone();
 
-        SetCaretPosition(newPos);
+        SetCaretPosition(newPos, true);
         PositionCaret();
         SetDefaultStyleToCursorStyle();
 
@@ -2729,11 +2723,6 @@ wxRichTextRange wxRichTextCtrl::AddImage(const wxImage& image)
 // selection and ranges
 // ----------------------------------------------------------------------------
 
-void wxRichTextCtrl::SelectAll()
-{
-    SetSelection(-1, -1);
-}
-
 /// Select none
 void wxRichTextCtrl::SelectNone()
 {
@@ -3174,6 +3163,7 @@ void wxRichTextCtrl::SetInsertionPoint(long pos)
     SelectNone();
 
     m_caretPosition = pos - 1;
+    m_caretAtLineStart = true;
 
     PositionCaret();
 
@@ -3268,7 +3258,8 @@ void wxRichTextCtrl::Replace(long from, long to,
 
     SetDefaultStyle(attr);
 
-    DoWriteText(value, SetValue_SelectionOnly);
+    if (!value.IsEmpty())
+        DoWriteText(value, SetValue_SelectionOnly);
 
     EndBatchUndo();
 }
@@ -4342,6 +4333,61 @@ bool wxRichTextCtrl::PromoteList(int promoteBy, const wxRichTextRange& range, wx
 bool wxRichTextCtrl::PromoteList(int promoteBy, const wxRichTextRange& range, const wxString& defName, int flags, int specifiedLevel)
 {
     return GetFocusObject()->PromoteList(promoteBy, range.ToInternal(), defName, flags, specifiedLevel);
+}
+
+// Given a character position at which there is a list style, find the range
+// encompassing the same list style by looking backwards and forwards.
+wxRichTextRange wxRichTextCtrl::FindRangeForList(long pos, bool& isNumberedList)
+{
+    wxRichTextParagraphLayoutBox* focusObject = GetFocusObject();
+    wxRichTextRange range = wxRichTextRange(-1, -1);
+    wxRichTextParagraph* para = focusObject->GetParagraphAtPosition(pos);
+    if (!para || !para->GetAttributes().HasListStyleName())
+        return range;
+    else
+    {
+        wxString listStyle = para->GetAttributes().GetListStyleName();
+        range = para->GetRange();
+
+        isNumberedList = para->GetAttributes().HasBulletNumber();
+
+        // Search back
+        wxRichTextObjectList::compatibility_iterator initialNode = focusObject->GetChildren().Find(para);
+        if (initialNode)
+        {
+            wxRichTextObjectList::compatibility_iterator startNode = initialNode->GetPrevious();
+            while (startNode)
+            {
+                wxRichTextParagraph* p = wxDynamicCast(startNode->GetData(), wxRichTextParagraph);
+                if (p)
+                {
+                    if (!p->GetAttributes().HasListStyleName() || p->GetAttributes().GetListStyleName() != listStyle)
+                        break;
+                    else
+                        range.SetStart(p->GetRange().GetStart());
+                }
+
+                startNode = startNode->GetPrevious();
+            }
+
+            // Search forward
+            wxRichTextObjectList::compatibility_iterator endNode = initialNode->GetNext();
+            while (endNode)
+            {
+                wxRichTextParagraph* p = wxDynamicCast(endNode->GetData(), wxRichTextParagraph);
+                if (p)
+                {
+                    if (!p->GetAttributes().HasListStyleName() || p->GetAttributes().GetListStyleName() != listStyle)
+                        break;
+                    else
+                        range.SetEnd(p->GetRange().GetEnd());
+                }
+
+                endNode = endNode->GetNext();
+            }
+        }
+    }
+    return range;
 }
 
 /// Deletes the content in the given range

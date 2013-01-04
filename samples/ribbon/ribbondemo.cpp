@@ -83,7 +83,9 @@ public:
         ID_CHANGE_TEXT1,
         ID_CHANGE_TEXT2,
         ID_UI_CHANGE_TEXT_UPDATED,
-        ID_REMOVE_PAGE
+        ID_REMOVE_PAGE,
+        ID_HIDE_PAGES,
+        ID_SHOW_PAGES
     };
 
     void OnEnableUpdateUI(wxUpdateUIEvent& evt);
@@ -92,6 +94,8 @@ public:
     void OnCheck(wxRibbonButtonBarEvent& evt);
     void OnEnable(wxRibbonButtonBarEvent& evt);
     void OnDisable(wxRibbonButtonBarEvent& evt);
+    void OnDisabled(wxRibbonButtonBarEvent& evt);
+    void OnEnableUpdated(wxRibbonButtonBarEvent& evt);
     void OnChangeText1(wxRibbonButtonBarEvent& evt);
     void OnChangeText2(wxRibbonButtonBarEvent& evt);
     void OnCircleButton(wxRibbonButtonBarEvent& evt);
@@ -129,7 +133,13 @@ public:
     void OnPositionLeftBoth(wxCommandEvent& evt);
     void OnPositionLeftDropdown(wxRibbonToolBarEvent& evt);
     void OnRemovePage(wxRibbonButtonBarEvent& evt);
+    void OnHidePages(wxRibbonButtonBarEvent& evt);
+    void OnShowPages(wxRibbonButtonBarEvent& evt);
     void OnTogglePanels(wxCommandEvent& evt);
+    void OnRibbonBarToggled(wxRibbonBarEvent& evt);
+    void OnRibbonBarHelpClicked(wxRibbonBarEvent& evt);
+
+    void OnSizeEvent(wxSizeEvent& evt);
 
     void OnExtButton(wxRibbonPanelEvent& evt);
 
@@ -179,6 +189,8 @@ bool MyApp::OnInit()
 BEGIN_EVENT_TABLE(MyFrame, wxFrame)
 EVT_RIBBONBUTTONBAR_CLICKED(ID_ENABLE, MyFrame::OnEnable)
 EVT_RIBBONBUTTONBAR_CLICKED(ID_DISABLE, MyFrame::OnDisable)
+EVT_RIBBONBUTTONBAR_CLICKED(ID_DISABLED, MyFrame::OnDisabled)
+EVT_RIBBONBUTTONBAR_CLICKED(ID_UI_ENABLE_UPDATED, MyFrame::OnEnableUpdated)
 EVT_UPDATE_UI(ID_UI_ENABLE_UPDATED, MyFrame::OnEnableUpdateUI)
 EVT_RIBBONBUTTONBAR_CLICKED(ID_CHECK, MyFrame::OnCheck)
 EVT_UPDATE_UI(ID_UI_CHECK_UPDATED, MyFrame::OnCheckUpdateUI)
@@ -228,6 +240,11 @@ EVT_MENU(ID_POSITION_TOP_BOTH, MyFrame::OnPositionTopBoth)
 EVT_TOGGLEBUTTON(ID_TOGGLE_PANELS, MyFrame::OnTogglePanels)
 EVT_RIBBONPANEL_EXTBUTTON_ACTIVATED(wxID_ANY, MyFrame::OnExtButton)
 EVT_RIBBONBUTTONBAR_CLICKED(ID_REMOVE_PAGE, MyFrame::OnRemovePage)
+EVT_RIBBONBUTTONBAR_CLICKED(ID_HIDE_PAGES, MyFrame::OnHidePages)
+EVT_RIBBONBUTTONBAR_CLICKED(ID_SHOW_PAGES, MyFrame::OnShowPages)
+EVT_RIBBONBAR_TOGGLED(wxID_ANY, MyFrame::OnRibbonBarToggled)
+EVT_RIBBONBAR_HELP_CLICK(wxID_ANY, MyFrame::OnRibbonBarHelpClicked)
+EVT_SIZE(MyFrame::OnSizeEvent)
 END_EVENT_TABLE()
 
 #include "align_center.xpm"
@@ -256,10 +273,12 @@ END_EVENT_TABLE()
 MyFrame::MyFrame()
     : wxFrame(NULL, wxID_ANY, wxT("wxRibbon Sample Application"), wxDefaultPosition, wxSize(800, 600), wxDEFAULT_FRAME_STYLE)
 {
-    m_ribbon = new wxRibbonBar(this, wxID_ANY,
-                               wxDefaultPosition, wxDefaultSize,
-                               wxRIBBON_BAR_DEFAULT_STYLE |
-                               wxRIBBON_BAR_SHOW_PANEL_EXT_BUTTONS);
+    m_ribbon = new wxRibbonBar(this,-1,wxDefaultPosition, wxDefaultSize, wxRIBBON_BAR_FLOW_HORIZONTAL
+                                | wxRIBBON_BAR_SHOW_PAGE_LABELS
+                                | wxRIBBON_BAR_SHOW_PANEL_EXT_BUTTONS
+                                | wxRIBBON_BAR_SHOW_TOGGLE_BUTTON
+                                | wxRIBBON_BAR_SHOW_HELP_BUTTON
+                                );
 
     {
         wxRibbonPage* home = new wxRibbonPage(m_ribbon, wxID_ANY, wxT("Examples"), ribbon_xpm);
@@ -386,6 +405,11 @@ MyFrame::MyFrame()
         bar->AddButton(ID_CHANGE_TEXT1, wxT("One"), ribbon_xpm);
         bar->AddButton(ID_CHANGE_TEXT2, wxT("Two"), ribbon_xpm);
         bar->AddButton(ID_UI_CHANGE_TEXT_UPDATED, wxT("Zero"), ribbon_xpm);
+
+        //Also set the general disabled text colour:
+        wxRibbonArtProvider* artProvider = m_ribbon->GetArtProvider();
+        wxColour tColour = artProvider->GetColor(wxRIBBON_ART_BUTTON_BAR_LABEL_COLOUR);
+        artProvider->SetColor(wxRIBBON_ART_BUTTON_BAR_LABEL_DISABLED_COLOUR, tColour.MakeDisabled());
     }
     new wxRibbonPage(m_ribbon, wxID_ANY, wxT("Empty Page"), empty_xpm);
     {
@@ -393,7 +417,11 @@ MyFrame::MyFrame()
         wxRibbonPanel *panel = new wxRibbonPanel(page, wxID_ANY, wxT("Page manipulation"), ribbon_xpm);
         wxRibbonButtonBar *bar = new wxRibbonButtonBar(panel, wxID_ANY);
         bar->AddButton(ID_REMOVE_PAGE, wxT("Remove"), wxArtProvider::GetBitmap(wxART_DELETE, wxART_OTHER, wxSize(24, 24)));
+        bar->AddButton(ID_HIDE_PAGES, wxT("Hide Pages"), ribbon_xpm);
+        bar->AddButton(ID_SHOW_PAGES, wxT("Show Pages"), ribbon_xpm);
     }
+    new wxRibbonPage(m_ribbon, wxID_ANY, wxT("Highlight Page"), empty_xpm);
+    m_ribbon->AddPageHighlight(m_ribbon->GetPageCount()-1);
 
     m_ribbon->Realize();
 
@@ -602,6 +630,16 @@ void MyFrame::OnEnable(wxRibbonButtonBarEvent& WXUNUSED(evt))
 void MyFrame::OnDisable(wxRibbonButtonBarEvent& WXUNUSED(evt))
 {
     m_bEnabled = false;
+}
+
+void MyFrame::OnDisabled(wxRibbonButtonBarEvent& WXUNUSED(evt))
+{
+    AddText("ERROR: Disabled button activated (not supposed to happen)");
+}
+
+void MyFrame::OnEnableUpdated(wxRibbonButtonBarEvent& WXUNUSED(evt))
+{
+    AddText("Button activated");
 }
 
 void MyFrame::OnCheck(wxRibbonButtonBarEvent& WXUNUSED(evt))
@@ -983,4 +1021,44 @@ void MyFrame::OnRemovePage(wxRibbonButtonBarEvent& WXUNUSED(evt))
         m_ribbon->DeletePage(n-1);
         m_ribbon->Realize();
     }
+}
+
+void MyFrame::OnHidePages(wxRibbonButtonBarEvent& WXUNUSED(evt))
+{
+    m_ribbon->HidePage(1);
+    m_ribbon->HidePage(2);
+    m_ribbon->HidePage(3);
+    m_ribbon->Realize();
+}
+
+void MyFrame::OnShowPages(wxRibbonButtonBarEvent& WXUNUSED(evt))
+{
+    m_ribbon->ShowPage(1);
+    m_ribbon->ShowPage(2);
+    m_ribbon->ShowPage(3);
+    m_ribbon->Realize();
+}
+
+void MyFrame::OnRibbonBarToggled(wxRibbonBarEvent& WXUNUSED(evt))
+{
+    AddText(wxString::Format("Ribbon bar %s.",
+                             m_ribbon->ArePanelsShown()
+                                ? "expanded"
+                                : "collapsed"));
+}
+
+void MyFrame::OnRibbonBarHelpClicked(wxRibbonBarEvent& WXUNUSED(evt))
+{
+    AddText("Ribbon bar help clicked");
+}
+
+// This shows how to hide ribbon dynamically if there is not enough space.
+void MyFrame::OnSizeEvent(wxSizeEvent& evt)
+{
+    if ( evt.GetSize().GetWidth() < 200 )
+        m_ribbon->Hide();
+    else
+        m_ribbon->Show();
+
+    evt.Skip();
 }

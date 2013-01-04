@@ -47,7 +47,9 @@ enum wxShowEffect
     wxSHOW_EFFECT_BLEND,
 
     /// Expanding or collapsing effect
-    wxSHOW_EFFECT_EXPAND
+    wxSHOW_EFFECT_EXPAND,
+
+    wxSHOW_EFFECT_MAX
 };
 
 
@@ -337,8 +339,8 @@ public:
 
     /**
         This method may be overridden in the derived classes to return @false to
-        indicate that this control doesn't accept input at all (i.e. behaves like
-        e.g. wxStaticText) and so doesn't need focus.
+        indicate that this control doesn't accept input at all (i.e.\ behaves like
+        e.g.\ wxStaticText) and so doesn't need focus.
 
         @see AcceptsFocusFromKeyboard()
     */
@@ -358,10 +360,32 @@ public:
         container windows.
      */
     virtual bool AcceptsFocusRecursively() const;
+    
+    /**
+     Can this window itself have focus?
+    */
+    bool IsFocusable() const;
+
+    /**
+       Can this window have focus right now?
+        
+       If this method returns true, it means that calling SetFocus() will
+       put focus either to this window or one of its children, if you need
+       to know whether this window accepts focus itself, use IsFocusable()
+    */
+    bool CanAcceptFocus() const;
+
+    /**
+       Can this window be assigned focus from keyboard right now?
+    */
+    bool CanAcceptFocusFromKeyboard() const;
+
 
     /**
         Returns @true if the window (or in case of composite controls, its main
         child window) has focus.
+
+        @since 2.9.0
 
         @see FindFocus()
     */
@@ -511,7 +535,7 @@ public:
     bool IsDescendant(wxWindowBase* win) const;
 
     /**
-        Reparents the window, i.e. the window will be removed from its
+        Reparents the window, i.e.\ the window will be removed from its
         current parent window (e.g. a non-standard toolbar in a wxFrame)
         and then re-inserted into another.
 
@@ -823,6 +847,12 @@ public:
         convenient, DoGetBestClientSize() when writing your own custom window
         class to change the value returned by this public non-virtual method.
 
+        Notice that the best size respects the minimal and maximal size
+        explicitly set for the window, if any. So even if some window believes
+        that it needs 200 pixels horizontally, calling SetMaxSize() with a
+        width of 100 would ensure that GetBestSize() returns the width of at
+        most 100 pixels.
+
         @see CacheBestSize(), @ref overview_windowsizing
     */
     wxSize GetBestSize() const;
@@ -922,9 +952,40 @@ public:
     */
     virtual wxSize GetMinSize() const;
 
+    /**
+        Returns the horizontal component of window minimal size.
+
+        The returned value is wxDefaultCoord if the minimal width was not set.
+
+        @see GetMinSize()
+     */
     int GetMinWidth() const;
+
+    /**
+        Returns the vertical component of window minimal size.
+
+        The returned value is wxDefaultCoord if the minimal height was not set.
+
+        @see GetMinSize()
+     */
     int GetMinHeight() const;
+
+    /**
+        Returns the horizontal component of window maximal size.
+
+        The returned value is wxDefaultCoord if the maximal width was not set.
+
+        @see GetMaxSize()
+     */
     int GetMaxWidth() const;
+
+    /**
+        Returns the vertical component of window maximal size.
+
+        The returned value is wxDefaultCoord if the maximal width was not set.
+
+        @see GetMaxSize()
+     */
     int GetMaxHeight() const;
 
     /**
@@ -1371,7 +1432,7 @@ public:
     virtual wxPoint GetClientAreaOrigin() const;
 
     /**
-       Get the client rectangle in window (i.e. client) coordinates
+       Get the client rectangle in window (i.e.\ client) coordinates
     */
     wxRect GetClientRect() const;
 
@@ -1896,6 +1957,18 @@ public:
     void SetOwnBackgroundColour(const wxColour& colour);
 
     /**
+        Return @true if this window inherits the background colour from its parent.
+
+        @see SetOwnBackgroundColour(), InheritAttributes()
+    */
+    bool InheritsBackgroundColour() const;
+
+    /**
+        Return @true if a background colour has been set for this window.
+    */
+    bool UseBgCol() const;
+
+    /**
         Sets the font of the window but prevents it from being inherited by the
         children of this window.
 
@@ -2322,7 +2395,7 @@ public:
     virtual bool HideWithEffect(wxShowEffect effect,
                                 unsigned int timeout = 0);
     /**
-        Returns @true if the window is enabled, i.e. if it accepts user input,
+        Returns @true if the window is enabled, i.e.\ if it accepts user input,
         @false otherwise.
 
         Notice that this method can return @false even if this window itself hadn't
@@ -2362,7 +2435,7 @@ public:
     virtual bool IsShown() const;
 
     /**
-        Returns @true if the window is physically visible on the screen, i.e. it
+        Returns @true if the window is physically visible on the screen, i.e.\ it
         is shown and all its parents up to the toplevel window are shown as well.
 
         @see IsShown()
@@ -2685,6 +2758,14 @@ public:
     virtual wxLayoutDirection GetLayoutDirection() const;
 
     /**
+       Mirror coordinates for RTL layout if this window uses it and if the
+       mirroring is not done automatically like Win32.
+    */
+    virtual wxCoord AdjustForLayoutDirection(wxCoord x,
+                                             wxCoord width,
+                                             wxCoord widthTotal) const;
+
+    /**
         Returns the window's name.
 
         @remarks This name is not guaranteed to be unique; it is up to the
@@ -2785,6 +2866,8 @@ public:
         @param force
             @false if the window's close handler should be able to veto the destruction
             of this window, @true if it cannot.
+
+        @return @true if the event was handled and not vetoed, @false otherwise.
 
         @remarks Close calls the close handler for the window, providing an
                  opportunity for the window to choose whether to destroy
@@ -3171,7 +3254,7 @@ public:
     virtual void InitDialog();
 
     /**
-        Returns @true if the window contents is double-buffered by the system, i.e. if
+        Returns @true if the window contents is double-buffered by the system, i.e.\ if
         any drawing done on the window is really done on a temporary backing surface
         and transferred to the screen all at once later.
 
@@ -3193,7 +3276,7 @@ public:
 
     /**
         Returns @true if this window is intrinsically enabled, @false otherwise,
-        i.e. if @ref Enable() Enable(@false) had been called. This method is
+        i.e.\ if @ref Enable() Enable(@false) had been called. This method is
         mostly used for wxWidgets itself, user code should normally use
         IsEnabled() instead.
     */
@@ -3218,6 +3301,12 @@ public:
         in order to send update events to the window in idle time.
     */
     virtual void OnInternalIdle();
+
+    /**
+       Send idle event to window and all subwindows. Returns true if more idle
+       time is requested.
+    */
+    virtual bool SendIdleEvents(wxIdleEvent& event);
 
     /**
         Registers a system wide hotkey. Every time the user presses the hotkey
@@ -3491,6 +3580,11 @@ protected:
         GetBestSize() returns an arbitrary hardcoded size for the window, so
         you must override it when implementing a custom window class.
 
+        Notice that the best size returned by this function is cached
+        internally, so if anything that results in the best size changing (e.g.
+        change to the control contents) happens, you need to call
+        InvalidateBestSize() to notify wxWidgets about it.
+
         @see @ref overview_windowsizing
 
         @since 2.9.0
@@ -3536,7 +3630,7 @@ protected:
     virtual int DoGetBestClientWidth(int height) const;
 
     /**
-        Sets the initial window size if none is given (i.e. at least one of the
+        Sets the initial window size if none is given (i.e.\ at least one of the
         components of the size passed to ctor/Create() is wxDefaultCoord).
         @deprecated Use SetInitialSize() instead.
     */

@@ -18,34 +18,10 @@
 
 @page overview_xrcformat XRC File Format
 
-Table of contents:
-- @ref overview_xrcformat_overview
-- @ref overview_xrcformat_root
-- @ref overview_xrcformat_objects
-    - @ref overview_xrcformat_object
-    - @ref overview_xrcformat_object_ref
-- @ref overview_xrcformat_datatypes
-- @ref overview_xrcformat_windows
-    - @ref overview_xrcformat_std_props
-    - @ref overview_xrcformat_controls
-- @ref overview_xrcformat_sizers
-- @ref overview_xrcformat_other_objects
-- @ref overview_xrcformat_platform
-- @ref overview_xrcformat_idranges
-- @ref overview_xrcformat_extending
-    - @ref overview_xrcformat_extending_subclass
-    - @ref overview_xrcformat_extending_unknown
-    - @ref overview_xrcformat_extending_custom
-- @ref overview_xrcformat_packed
-- @ref overview_xrcformat_oldversions
+@tableofcontents
 
-This document describes the format of XRC resource files, as used by wxXmlResource.
-
-
-<hr>
-
-
-@section overview_xrcformat_overview Overview
+This document describes the format of XRC resource files, as used by
+wxXmlResource.
 
 XRC file is a XML file with all of its elements in the
 @c http://www.wxwidgets.org/wxxrc namespace. For backward compatibility,
@@ -64,6 +40,7 @@ wxXmlResource::LoadDialog() and other LoadXXX methods. They must have
 
 Child objects are not directly accessible via wxXmlResource, they can only
 be accessed using XRCCTRL().
+
 
 
 @section overview_xrcformat_root Resource Root Element
@@ -402,7 +379,8 @@ Examples:
 
 XRC uses similar, but more flexible, abstract description of fonts to that
 used by wxFont class. A font can be described either in terms of its elementary
-properties, or it can be derived from one of system fonts.
+properties, or it can be derived from one of system fonts or the parent window
+font.
 
 The font property element is "composite" element: unlike majority of
 properties, it doesn't have text value but contains several child elements
@@ -413,7 +391,8 @@ and can be one of the following "sub-properties":
 @hdr3col{property, type, description}
 @row3col{size, unsigned integer,
     Pixel size of the font (default: wxNORMAL_FONT's size or @c sysfont's
-    size if the @c sysfont property is used.}
+    size if the @c sysfont property is used or the current size of the font
+    of the enclosing control if the @c inherit property is used.}
 @row3col{style, enum,
     One of "normal", "italic" or "slant" (default: normal).}
 @row3col{weight, enum,
@@ -431,14 +410,18 @@ and can be one of the following "sub-properties":
     (default: unspecified).}
 @row3col{sysfont, ,
     Symbolic name of system standard font(one of wxSYS_*_FONT constants).}
+@row3col{inherit, @ref overview_xrcformat_type_bool,
+    If true, the font of the enclosing control is used. If this property and the
+    @c sysfont property are specified the @c sysfont property takes precedence.}
 @row3col{relativesize, float,
-    Float, font size relative to chosen system font's size; can only be
-    used when 'sysfont' is used and when 'size' is not used.}
+    Float, font size relative to chosen system font's or inherited font's size;
+    can only be used when 'sysfont' or 'inherit' is used and when 'size' is not
+    used.}
 @endTable
 
 All of them are optional, if they are missing, appropriate wxFont default is
-used. If the @c sysfont property is used, then the defaults are taken from it
-instead.
+used. If the @c sysfont or @c inherit property is used, then the defaults are
+taken from it instead.
 
 Examples:
 @code
@@ -455,6 +438,10 @@ Examples:
     <relativesize>1.5</relativesize>
 </font>
 @endcode
+
+@note You cannot use @c inherit for a font that gets used before the enclosing
+      control is created, e.g. if the control gets the font passed as parameter
+      for its constructor, or if the control is not derived from wxWindow.
 
 
 @section overview_xrcformat_windows Controls and Windows
@@ -524,6 +511,48 @@ controls cannot have children.
 @row3col{animation, @ref overview_xrcformat_type_url,
     Animation file to load into the control (required).}
 @endTable
+
+
+@subsubsection xrc_wxauinotebook wxAuiNotebook
+
+A wxAuiNotebook can have one or more child objects of the @c notebookpage
+pseudo-class.
+@c notebookpage objects have the following properties:
+
+@beginTable
+@hdr3col{property, type, description}
+@row3col{label, @ref overview_xrcformat_type_text,
+     Page label (required).}
+@row3col{bitmap, @ref overview_xrcformat_type_bitmap,
+     Bitmap shown alongside the label (default: none).}
+@row3col{selected, @ref overview_xrcformat_type_bool,
+     Is the page selected initially (only one page can be selected; default: 0)?}
+@endTable
+
+Each @c notebookpage must have exactly one non-toplevel window as its child.
+
+Example:
+@code
+<object class="wxAuiNotebook">
+    <style>wxBK_BOTTOM</style>
+    <object class="notebookpage">
+        <label>Page 1</label>
+        <bitmap>bitmap.png</bitmap>
+        <object class="wxPanel" name="page_1">
+            ...
+        </object>
+    </object>
+</object>
+@endcode
+
+Notice that wxAuiNotebook support in XRC is available in wxWidgets 2.9.5 and
+later only and you need to explicitly register its handler using
+@code
+    #include <wx/xrc/xh_auinotbk.h>
+
+    AddHandler(new wxAuiNotebookXmlHandler);
+@endcode
+to use it.
 
 
 @subsubsection xrc_wxbannerwindow wxBannerWindow
@@ -1382,6 +1411,53 @@ Example:
 @endcode
 
 
+@subsubsection xrc_wxribbon wxRibbon
+
+A wxRibbonBar is a container of ribbon pages which, in turn, contain elements
+that can be wxRibbonControl or wxRibbonGallery.
+
+Example:
+@code
+<object class="wxRibbonBar" name="ribbonbar">
+    <object class="page" name="FilePage">
+        <label>First</label>
+        <object class="panel">
+            <label>File</label>
+            <object class="wxRibbonButtonBar">
+                <object class="button" name="Open">
+                    <bitmap>open.xpm</bitmap>
+                    <label>Open</label>
+                </object>
+            </object>
+        </object>
+    </object>
+    <object class="page" name="ViewPage">
+        <label>View</label>
+        <object class="panel">
+            <label>Zoom</label>
+            <object class="wxRibbonGallery">
+                <object class="item">
+                    <bitmap>zoomin.xpm</bitmap>
+                </object>
+                <object class="item">
+                    <bitmap>zoomout.xpm</bitmap>
+                </object>
+            </object>
+        </object>
+    </object>
+</object>
+@endcode
+
+Notice that wxRibbon support in XRC is available in wxWidgets 2.9.5 and
+later only and you need to explicitly register its handler using
+@code
+    #include <wx/xrc/xh_ribbon.h>
+
+    AddHandler(new wxRibbonXmlHandler);
+@endcode
+to use it.
+
+
 @subsubsection xrc_wxrichtextctrl wxRichTextCtrl
 
 @beginTable
@@ -1391,6 +1467,15 @@ Example:
 @row3col{maxlength, integer,
     Maximum length of the text entered (default: unlimited).}
 @endTable
+
+Notice that wxRichTextCtrl support in XRC is available in wxWidgets 2.9.5 and
+later only and you need to explicitly register its handler using
+@code
+    #include <wx/xrc/xh_richtext.h>
+
+    AddHandler(new wxRichTextCtrl);
+@endcode
+to use it.
 
 
 @subsubsection xrc_wxscrollbar wxScrollBar
@@ -1495,7 +1580,12 @@ HTML markup. Note that the markup has to be escaped:
 
 @subsubsection xrc_wxspinctrl wxSpinCtrl
 
-wxSpinCtrl supports the properties as @ref xrc_wxspinbutton.
+wxSpinCtrl supports the same properties as @ref xrc_wxspinbutton and, since
+wxWidgets 2.9.5, another one:
+@beginTable
+@row3col{base, integer,
+    Numeric base, currently can be only 10 or 16 (default: 10).}
+@endTable
 
 
 @subsubsection xrc_wxsplitterwindow wxSplitterWindow
@@ -1904,8 +1994,8 @@ Example of sizers XRC code:
         <rows>0</rows>
         <vgap>0</vgap>
         <hgap>0</hgap>
-        <growablecols>0</growablecols>
-        <growablerows>0</growablerows>
+        <growablecols>0:1</growablecols>
+        <growablerows>0:1</growablerows>
         <object class="sizeritem">
             <flag>wxALIGN_CENTRE|wxALL</flag>
             <border>5</border>
@@ -1986,12 +2076,22 @@ class-specific properties. All classes support the following properties:
 @row3col{cols, integer, Number of columns in the grid (default: 0 - determine automatically).}
 @row3col{vgap, integer, Vertical gap between children (default: 0).}
 @row3col{hgap, integer, Horizontal gap between children (default: 0).}
+@row3col{flexibledirection, @ref overview_xrcformat_type_style,
+    Flexible direction, @c wxVERTICAL, @c wxHORIZONTAL or @c wxBOTH (default).
+    This property is only available since wxWidgets 2.9.5.}
+@row3col{nonflexiblegrowmode, @ref overview_xrcformat_type_style,
+    Grow mode in the non-flexible direction,
+    @c wxFLEX_GROWMODE_NONE, @c wxFLEX_GROWMODE_SPECIFIED (default) or
+    @c wxFLEX_GROWMODE_ALL.
+    This property is only available since wxWidgets 2.9.5.}
 @row3col{growablerows, comma-separated integers list,
-    Comma-separated list of indexes of rows that are growable
-    (default: none).}
+    Comma-separated list of indexes of rows that are growable (none by default).
+    Since wxWidgets 2.9.5 optional proportion can be appended to each number
+    after a colon (@c :).}
 @row3col{growablecols, comma-separated integers list,
-    Comma-separated list of indexes of columns that are growable
-    (default: none).}
+    Comma-separated list of indexes of columns that are growable (none by default).
+    Since wxWidgets 2.9.5 optional proportion can be appended to each number
+    after a colon (@c :).}
 @endTable
 
 @subsection overview_xrcformat_wxgridbagsizer wxGridBagSizer
@@ -2000,11 +2100,21 @@ class-specific properties. All classes support the following properties:
 @hdr3col{property, type, description}
 @row3col{vgap, integer, Vertical gap between children (default: 0).}
 @row3col{hgap, integer, Horizontal gap between children (default: 0).}
+@row3col{flexibledirection, @ref overview_xrcformat_type_style,
+    Flexible direction, @c wxVERTICAL, @c wxHORIZONTAL, @c wxBOTH (default: @c wxBOTH).}
+@row3col{nonflexiblegrowmode, @ref overview_xrcformat_type_style,
+    Grow mode in the non-flexible direction,
+    @c wxFLEX_GROWMODE_NONE, @c wxFLEX_GROWMODE_SPECIFIED, @c wxFLEX_GROWMODE_ALL
+    (default: @c wxFLEX_GROWMODE_SPECIFIED).}
 @row3col{growablerows, comma-separated integers list,
-    Comma-separated list of indexes of rows that are growable
+    Comma-separated list of indexes of rows that are growable,
+    optionally the proportion can be appended after each number
+    separated by a @c :
     (default: none).}
 @row3col{growablecols, comma-separated integers list,
-    Comma-separated list of indexes of columns that are growable
+    Comma-separated list of indexes of columns that are growable,
+    optionally the proportion can be appended after each number
+    separated by a @c :
     (default: none).}
 @endTable
 

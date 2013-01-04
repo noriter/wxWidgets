@@ -19,6 +19,7 @@
 #if wxUSE_COLOURDLG
 
 #include "wx/colordlg.h"
+#include "wx/testing.h"
 
 #ifndef WX_PRECOMP
     #include "wx/intl.h"
@@ -82,6 +83,8 @@ bool wxColourDialog::Create(wxWindow *parent, wxColourData *data)
 
 int wxColourDialog::ShowModal()
 {
+    WX_TESTING_SHOW_MODAL_HOOK();
+
     ColourDataToDialog();
 
     gint result = gtk_dialog_run(GTK_DIALOG(m_widget));
@@ -131,13 +134,13 @@ void wxColourDialog::ColourDataToDialog()
         gtk_color_selection_dialog_get_color_selection(
         GTK_COLOR_SELECTION_DIALOG(m_widget)));
 
-    const wxColour& c = m_data.GetColour();
-    if (c.IsOk())
+    const wxColour& color = m_data.GetColour();
+    if (color.IsOk())
     {
 #ifdef __WXGTK3__
-        gtk_color_selection_set_current_rgba(sel, c);
+        gtk_color_selection_set_current_rgba(sel, color);
 #else
-        gtk_color_selection_set_current_color(sel, c.GetColor());
+        gtk_color_selection_set_current_color(sel, color.GetColor());
 #endif
     }
 

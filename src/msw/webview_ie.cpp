@@ -28,6 +28,7 @@
 #include "wx/filesys.h"
 #include "wx/dynlib.h"
 #include <initguid.h>
+#include <wininet.h>
 
 /* These GUID definitions are our own implementation to support interfaces
  * normally in urlmon.h. See include/wx/msw/webview_ie.h
@@ -38,8 +39,24 @@ namespace {
 DEFINE_GUID(wxIID_IInternetProtocolRoot,0x79eac9e3,0xbaf9,0x11ce,0x8c,0x82,0,0xaa,0,0x4b,0xa9,0xb);
 DEFINE_GUID(wxIID_IInternetProtocol,0x79eac9e4,0xbaf9,0x11ce,0x8c,0x82,0,0xaa,0,0x4b,0xa9,0xb);
 DEFINE_GUID(wxIID_IDocHostUIHandler, 0xbd3f23c0, 0xd43e, 0x11cf, 0x89, 0x3b, 0x00, 0xaa, 0x00, 0xbd, 0xce, 0x1a);
+DEFINE_GUID(wxIID_IHTMLElement2,0x3050f434,0x98b5,0x11cf,0xbb,0x82,0,0xaa,0,0xbd,0xce,0x0b);
+DEFINE_GUID(wxIID_IMarkupServices,0x3050f4a0,0x98b5,0x11cf,0xbb,0x82,0,0xaa,0,0xbd,0xce,0x0b);
+DEFINE_GUID(wxIID_IMarkupContainer,0x3050f5f9,0x98b5,0x11cf,0xbb,0x82,0,0xaa,0,0xbd,0xce,0x0b);
+
+enum //Internal find flags
+{
+    wxWEB_VIEW_FIND_ADD_POINTERS =      0x0001,
+    wxWEB_VIEW_FIND_REMOVE_HIGHLIGHT =  0x0002
+};
 
 }
+
+//Convenience function for error conversion
+#define WX_ERROR_CASE(error, wxerror) \
+        case error: \
+            event.SetString(#error); \
+            event.SetInt(wxerror); \
+            break;
 
 wxIMPLEMENT_DYNAMIC_CLASS(wxWebViewIE, wxWebView);
 
@@ -68,6 +85,7 @@ bool wxWebViewIE::Create(wxWindow* parent,
     m_historyEnabled = true;
     m_historyPosition = -1;
     m_zoomType = wxWEB_VIEW_ZOOM_TYPE_TEXT;
+    FindClear();
 
     if (::CoCreateInstance(CLSID_WebBrowser, NULL,
                            CLSCTX_INPROC_SERVER, // CLSCTX_INPROC,
@@ -82,7 +100,7 @@ bool wxWebViewIE::Create(wxWindow* parent,
     m_webBrowser->put_RegisterAsBrowser(VARIANT_TRUE);
     m_webBrowser->put_RegisterAsDropTarget(VARIANT_TRUE);
 
-    m_uiHandler = new DocHostUIHandler;
+    m_uiHandler = new DocHostUIHandler(this);
 
     m_container = new wxIEContainer(this, IID_IWebBrowser2, m_webBrowser, m_uiHandler);
 
@@ -94,10 +112,29 @@ bool wxWebViewIE::Create(wxWindow* parent,
 
 wxWebViewIE::~wxWebViewIE()
 {
-    for(unsigned int i = 0; i < m_factories.size(); i++)
+    wxDynamicLibrary urlMon(wxT("urlmon.dll"));
+    if(urlMon.HasSymbol(wxT("CoInternetGetSession")))
     {
-        m_factories[i]->Release();
+        typedef HRESULT (WINAPI *CoInternetGetSession_t)(DWORD,
+                                                         wxIInternetSession**,
+                                                         DWORD);
+        wxDYNLIB_FUNCTION(CoInternetGetSession_t, CoInternetGetSession, urlMon);
+
+        wxIInternetSession* session;
+        HRESULT res = (*pfnCoInternetGetSession)(0, &session, 0);
+        if(FAILED(res))
+        {
+            wxFAIL_MSG("Could not retrive internet session");
+        }
+
+        for(unsigned int i = 0; i < m_factories.size(); i++)
+        {
+            session->UnregisterNameSpace(m_factories[i], 
+                                        (m_factories[i]->GetName()).wc_str());
+            m_factories[i]->Release();
+        }
     }
+    FindClear();
 }
 
 void wxWebViewIE::LoadURL(const wxString& url)
@@ -105,7 +142,7 @@ void wxWebViewIE::LoadURL(const wxString& url)
     m_ie.CallMethod("Navigate", wxConvertStringToOle(url));
 }
 
-void wxWebViewIE::SetPage(const wxString& html, const wxString& baseUrl)
+void wxWebViewIE::DoSetPage(const wxString& html, const wxString& baseUrl)
 {
     BSTR bstr = SysAllocString(OLESTR(""));
     SAFEARRAY *psaStrings = SafeArrayCreateVector(VT_VARIANT, 0, 1);
@@ -591,6 +628,53 @@ void wxWebViewIE::Redo()
     ExecCommand("Redo");
 }
 
+long wxWebViewIE::Find(const wxString& text, int flags)
+{
+    //If the text is empty then we clear.
+    if(text.IsEmpty())
+    {
+        ClearSelection();
+        if(m_findFlags & wxWEB_VIEW_FIND_HIGHLIGHT_RESULT)
+        {
+            FindInternal(m_findText, (m_findFlags &~ wxWEB_VIEW_FIND_HIGHLIGHT_RESULT), wxWEB_VIEW_FIND_REMOVE_HIGHLIGHT);
+        }
+        FindClear();
+        return wxNOT_FOUND;
+    }
+    //Have we done this search before?
+    if(m_findText == text)
+    {
+        //Just do a highlight?
+        if((flags & wxWEB_VIEW_FIND_HIGHLIGHT_RESULT) != (m_findFlags & wxWEB_VIEW_FIND_HIGHLIGHT_RESULT))
+        {
+            m_findFlags = flags;
+            if(!m_findPointers.empty())
+            {
+                FindInternal(m_findText, m_findFlags, ((flags & wxWEB_VIEW_FIND_HIGHLIGHT_RESULT) == 0 ? wxWEB_VIEW_FIND_REMOVE_HIGHLIGHT : 0));
+            }
+            return m_findPosition;
+        }
+        else if(((m_findFlags & wxWEB_VIEW_FIND_ENTIRE_WORD) == (flags & wxWEB_VIEW_FIND_ENTIRE_WORD)) && ((m_findFlags & wxWEB_VIEW_FIND_MATCH_CASE) == (flags&wxWEB_VIEW_FIND_MATCH_CASE)))
+        {
+            m_findFlags = flags;
+            return FindNext(((flags & wxWEB_VIEW_FIND_BACKWARDS) ? -1 : 1));
+        }
+    }
+    //Remove old highlight if any.
+    if(m_findFlags & wxWEB_VIEW_FIND_HIGHLIGHT_RESULT)
+    {
+        FindInternal(m_findText, (m_findFlags &~ wxWEB_VIEW_FIND_HIGHLIGHT_RESULT), wxWEB_VIEW_FIND_REMOVE_HIGHLIGHT);
+    }
+    //Reset find variables.
+    FindClear();
+    ClearSelection();
+    m_findText = text;
+    m_findFlags = flags;
+    //find the text and return count.
+    FindInternal(text, flags, wxWEB_VIEW_FIND_ADD_POINTERS);
+    return m_findPointers.empty() ? wxNOT_FOUND : m_findPointers.size();
+}
+
 void wxWebViewIE::SetEditable(bool enable)
 {
     wxCOMPtr<IHTMLDocument2> document(GetDocument());
@@ -856,6 +940,232 @@ wxCOMPtr<IHTMLDocument2> wxWebViewIE::GetDocument() const
     return document;
 }
 
+bool wxWebViewIE::IsElementVisible(IHTMLElement* elm)
+{
+    wxIHTMLCurrentStyle* style;
+    IHTMLElement *elm1 = elm;
+    wxIHTMLElement2 *elm2;
+    BSTR tmp_bstr;
+    bool is_visible = true;
+    //This method is not perfect but it does discover most of the hidden elements.
+    //so if a better solution is found, then please do improve.
+    while(elm1)
+    {
+        if(SUCCEEDED(elm1->QueryInterface(wxIID_IHTMLElement2, (void**) &elm2)))
+        {
+            if(SUCCEEDED(elm2->get_currentStyle(&style)))
+            {
+                //Check if the object has the style display:none.
+                if((style->get_display(&tmp_bstr) != S_OK) || 
+                   (tmp_bstr != NULL && (_wcsicmp(tmp_bstr, L"none") == 0)))
+                {
+                    is_visible = false;
+                }
+                //Check if the object has the style visibility:hidden.
+                if(is_visible && (style->get_visibility(&tmp_bstr) != S_OK) || 
+                  (tmp_bstr != NULL && _wcsicmp(tmp_bstr, L"hidden") == 0))
+                {
+                    is_visible = false;
+                }
+                style->Release();
+            }
+            elm2->Release();
+        }
+
+        //Lets check the object's parent element.
+        IHTMLElement* parent;
+        if(is_visible && SUCCEEDED(elm1->get_parentElement(&parent)))
+        {
+            elm1->Release();
+            elm1 = parent;
+        }
+        else
+        {
+            elm1->Release();
+            break;
+        }
+    }
+    return is_visible;
+}
+
+void wxWebViewIE::FindInternal(const wxString& text, int flags, int internal_flag)
+{
+    wxIMarkupServices *pIMS;
+    wxIMarkupContainer *pIMC;
+    wxIMarkupPointer *ptrBegin, *ptrEnd;
+    IHTMLElement* elm;
+    long find_flag = 0;
+    IHTMLDocument2 *document = GetDocument();
+    //This function does the acutal work.
+    if(SUCCEEDED(document->QueryInterface(wxIID_IMarkupServices, (void **)&pIMS)))
+    {
+        if(SUCCEEDED(document->QueryInterface(wxIID_IMarkupContainer, (void **)&pIMC)))
+        {
+            BSTR attr_bstr = SysAllocString(L"style=\"background-color:#ffff00\"");
+            BSTR text_bstr = SysAllocString(text.wc_str());
+            pIMS->CreateMarkupPointer(&ptrBegin);
+            pIMS->CreateMarkupPointer(&ptrEnd);
+
+            ptrBegin->SetGravity(wxPOINTER_GRAVITY_Right);
+            ptrBegin->MoveToContainer(pIMC, TRUE);
+            //Create the find flag from the wx one.
+            if(flags & wxWEB_VIEW_FIND_ENTIRE_WORD)
+            {
+                find_flag |= wxFINDTEXT_WHOLEWORD;
+            }
+            if(flags & wxWEB_VIEW_FIND_MATCH_CASE)
+            {
+                find_flag |= wxFINDTEXT_MATCHCASE;
+            }
+
+            //A little speed-up to avoid to re-alloc in the positions vector.
+            if(text.Len() < 3 && m_findPointers.capacity() < 500)
+            {
+               m_findPointers.reserve(text.Len() == 1 ? 1000 : 500);
+            }
+
+            while(ptrBegin->FindText(text_bstr, find_flag, ptrEnd, NULL) == S_OK)
+            {
+                if(ptrBegin->CurrentScope(&elm) == S_OK)
+                {
+                    if(IsElementVisible(elm))
+                    {
+                        //Highlight the word if the flag was set.
+                        if(flags & wxWEB_VIEW_FIND_HIGHLIGHT_RESULT)
+                        {
+                            IHTMLElement* pFontEl;
+                            pIMS->CreateElement(wxTAGID_FONT, attr_bstr, &pFontEl);
+                            pIMS->InsertElement(pFontEl, ptrBegin, ptrEnd);
+                        }
+                        if(internal_flag & wxWEB_VIEW_FIND_REMOVE_HIGHLIGHT)
+                        {
+                            IHTMLElement* pFontEl;
+                            ptrBegin->CurrentScope(&pFontEl);
+                            pIMS->RemoveElement(pFontEl);
+                            pFontEl->Release();
+                        }
+                        if(internal_flag & wxWEB_VIEW_FIND_ADD_POINTERS)
+                        {
+                            wxIMarkupPointer *cptrBegin, *cptrEnd;
+                            pIMS->CreateMarkupPointer(&cptrBegin);
+                            pIMS->CreateMarkupPointer(&cptrEnd);
+                            cptrBegin->MoveToPointer(ptrBegin);
+                            cptrEnd->MoveToPointer(ptrEnd);
+                            m_findPointers.push_back(wxFindPointers(cptrBegin,cptrEnd));
+                        }
+                    }
+                    elm->Release();
+                }
+                ptrBegin->MoveToPointer(ptrEnd);
+            }
+            //Clean up.
+            SysFreeString(text_bstr);
+            SysFreeString(attr_bstr);
+            pIMC->Release();
+            ptrBegin->Release();
+            ptrEnd->Release();
+        }
+        pIMS->Release();
+    }
+    document->Release();
+}
+
+long wxWebViewIE::FindNext(int direction)
+{
+    //Don't bother if we have no pointers set.
+    if(m_findPointers.empty())
+    {
+        return wxNOT_FOUND;
+    }
+    //Manage the find position and do some checks.
+    if(direction > 0)
+    {
+        m_findPosition++;
+    }
+    else
+    {
+        m_findPosition--;
+    }
+
+    if(m_findPosition >= (signed)m_findPointers.size())
+    {
+        if(m_findFlags & wxWEB_VIEW_FIND_WRAP)
+        {
+            m_findPosition = 0;
+        }
+        else
+        {
+            m_findPosition--;
+            return wxNOT_FOUND;
+        }
+    }
+    else if(m_findPosition < 0)
+    {
+        if(m_findFlags & wxWEB_VIEW_FIND_WRAP)
+        {
+            m_findPosition = m_findPointers.size()-1;
+        }
+        else
+        {
+            m_findPosition++;
+            return wxNOT_FOUND;
+        }
+    }
+    //some variables to use later on.
+    IHTMLElement *body_element;
+    IHTMLBodyElement *body;
+    wxIHTMLTxtRange *range = NULL;
+    wxIMarkupServices *pIMS;
+    IHTMLDocument2 *document = GetDocument();
+    long ret = -1;
+    //Now try to create a range from the body.
+    if(SUCCEEDED(document->get_body(&body_element)))
+    {
+        if(SUCCEEDED(body_element->QueryInterface(IID_IHTMLBodyElement,(void**)&body)))
+        {
+            if(SUCCEEDED(body->createTextRange((IHTMLTxtRange**)(&range))))
+            {
+                //So far so good, now we try to position our find pointers.
+                if(SUCCEEDED(document->QueryInterface(wxIID_IMarkupServices,(void **)&pIMS)))
+                {
+                    wxIMarkupPointer *begin = m_findPointers[m_findPosition].begin, *end = m_findPointers[m_findPosition].end;
+                    if(pIMS->MoveRangeToPointers(begin,end,range) == S_OK && range->select() == S_OK)
+                    {
+                        ret = m_findPosition;
+                    }
+                    pIMS->Release();
+                }
+                range->Release();
+            }
+            body->Release();
+        }
+        body_element->Release();
+    }
+    document->Release();
+    return ret;
+}
+
+void wxWebViewIE::FindClear()
+{
+    //Reset find variables.
+    m_findText.Empty();
+    m_findFlags = wxWEB_VIEW_FIND_DEFAULT;
+    m_findPosition = -1;
+
+    //The m_findPointers contains pointers for the found text.
+    //Since it uses ref counting we call release on the pointers first
+    //before we remove them from the vector. In other words do not just
+    //remove elements from m_findPointers without calling release first
+    //or you will get a memory leak.
+    size_t count = m_findPointers.size();
+    for(size_t i = 0; i < count; i++)
+    {
+        m_findPointers[i].begin->Release();
+        m_findPointers[i].end->Release();
+    }
+    m_findPointers.clear();
+}
+
 bool wxWebViewIE::EnableControlFeature(long flag, bool enable)
 {
 #if wxUSE_DYNLIB_CLASS
@@ -989,6 +1299,8 @@ void wxWebViewIE::onActiveXEvent(wxActiveXEvent& evt)
             }
             //Reset as we are done now
             m_historyLoadingFromList = false;
+            //Reset the find values.
+            FindClear();
             // TODO: set target parameter if possible
             wxString target = wxEmptyString;
             wxWebViewEvent event(wxEVT_COMMAND_WEB_VIEW_LOADED, GetId(),
@@ -1017,125 +1329,66 @@ void wxWebViewIE::onActiveXEvent(wxActiveXEvent& evt)
 
         case DISPID_NAVIGATEERROR:
         {
-            wxWebViewNavigationError errorType = wxWEB_NAV_ERR_OTHER;
-            wxString errorCode = "?";
+            wxWebViewEvent event(wxEVT_COMMAND_WEB_VIEW_ERROR, GetId(),
+                                 evt[1].GetString(), evt[2].GetString());
+            event.SetEventObject(this);
+
             switch (evt[3].GetLong())
             {
-            case INET_E_INVALID_URL: // (0x800C0002L or -2146697214)
-                errorCode = "INET_E_INVALID_URL";
-                errorType = wxWEB_NAV_ERR_REQUEST;
-                break;
-            case INET_E_NO_SESSION: // (0x800C0003L or -2146697213)
-                errorCode = "INET_E_NO_SESSION";
-                errorType = wxWEB_NAV_ERR_CONNECTION;
-                break;
-            case INET_E_CANNOT_CONNECT: // (0x800C0004L or -2146697212)
-                errorCode = "INET_E_CANNOT_CONNECT";
-                errorType = wxWEB_NAV_ERR_CONNECTION;
-                break;
-            case INET_E_RESOURCE_NOT_FOUND: // (0x800C0005L or -2146697211)
-                errorCode = "INET_E_RESOURCE_NOT_FOUND";
-                errorType = wxWEB_NAV_ERR_NOT_FOUND;
-                break;
-            case INET_E_OBJECT_NOT_FOUND: // (0x800C0006L or -2146697210)
-                errorCode = "INET_E_OBJECT_NOT_FOUND";
-                errorType = wxWEB_NAV_ERR_NOT_FOUND;
-                break;
-            case INET_E_DATA_NOT_AVAILABLE: // (0x800C0007L or -2146697209)
-                errorCode = "INET_E_DATA_NOT_AVAILABLE";
-                errorType = wxWEB_NAV_ERR_NOT_FOUND;
-                break;
-            case INET_E_DOWNLOAD_FAILURE: // (0x800C0008L or -2146697208)
-                errorCode = "INET_E_DOWNLOAD_FAILURE";
-                errorType = wxWEB_NAV_ERR_CONNECTION;
-                break;
-            case INET_E_AUTHENTICATION_REQUIRED: // (0x800C0009L or -2146697207)
-                errorCode = "INET_E_AUTHENTICATION_REQUIRED";
-                errorType = wxWEB_NAV_ERR_AUTH;
-                break;
-            case INET_E_NO_VALID_MEDIA: // (0x800C000AL or -2146697206)
-                errorCode = "INET_E_NO_VALID_MEDIA";
-                errorType = wxWEB_NAV_ERR_REQUEST;
-                break;
-            case INET_E_CONNECTION_TIMEOUT: // (0x800C000BL or -2146697205)
-                errorCode = "INET_E_CONNECTION_TIMEOUT";
-                errorType = wxWEB_NAV_ERR_CONNECTION;
-                break;
-            case INET_E_INVALID_REQUEST: // (0x800C000CL or -2146697204)
-                errorCode = "INET_E_INVALID_REQUEST";
-                errorType = wxWEB_NAV_ERR_REQUEST;
-                break;
-            case INET_E_UNKNOWN_PROTOCOL: // (0x800C000DL or -2146697203)
-                errorCode = "INET_E_UNKNOWN_PROTOCOL";
-                errorType = wxWEB_NAV_ERR_REQUEST;
-                break;
-            case INET_E_SECURITY_PROBLEM: // (0x800C000EL or -2146697202)
-                errorCode = "INET_E_SECURITY_PROBLEM";
-                errorType = wxWEB_NAV_ERR_SECURITY;
-                break;
-            case INET_E_CANNOT_LOAD_DATA: // (0x800C000FL or -2146697201)
-                errorCode = "INET_E_CANNOT_LOAD_DATA";
-                errorType = wxWEB_NAV_ERR_OTHER;
-                break;
-            case INET_E_CANNOT_INSTANTIATE_OBJECT:
-                // CoCreateInstance will return an error code if this happens,
-                // we'll handle this above.
-                return;
-                break;
-            case INET_E_REDIRECT_FAILED: // (0x800C0014L or -2146697196)
-                errorCode = "INET_E_REDIRECT_FAILED";
-                errorType = wxWEB_NAV_ERR_OTHER;
-                break;
-            case INET_E_REDIRECT_TO_DIR: // (0x800C0015L or -2146697195)
-                errorCode = "INET_E_REDIRECT_TO_DIR";
-                errorType = wxWEB_NAV_ERR_REQUEST;
-                break;
-            case INET_E_CANNOT_LOCK_REQUEST: // (0x800C0016L or -2146697194)
-                errorCode = "INET_E_CANNOT_LOCK_REQUEST";
-                errorType = wxWEB_NAV_ERR_OTHER;
-                break;
-            case INET_E_USE_EXTEND_BINDING: // (0x800C0017L or -2146697193)
-                errorCode = "INET_E_USE_EXTEND_BINDING";
-                errorType = wxWEB_NAV_ERR_OTHER;
-                break;
-            case INET_E_TERMINATED_BIND: // (0x800C0018L or -2146697192)
-                errorCode = "INET_E_TERMINATED_BIND";
-                errorType = wxWEB_NAV_ERR_OTHER;
-                break;
-            case INET_E_INVALID_CERTIFICATE: // (0x800C0019L or -2146697191)
-                errorCode = "INET_E_INVALID_CERTIFICATE";
-                errorType = wxWEB_NAV_ERR_CERTIFICATE;
-                break;
-            case INET_E_CODE_DOWNLOAD_DECLINED: // (0x800C0100L or -2146696960)
-                errorCode = "INET_E_CODE_DOWNLOAD_DECLINED";
-                errorType = wxWEB_NAV_ERR_USER_CANCELLED;
-                break;
-            case INET_E_RESULT_DISPATCHED: // (0x800C0200L or -2146696704)
-                // cancel request cancelled...
-                errorCode = "INET_E_RESULT_DISPATCHED";
-                errorType = wxWEB_NAV_ERR_OTHER;
-                break;
-            case INET_E_CANNOT_REPLACE_SFP_FILE: // (0x800C0300L or -2146696448)
-                errorCode = "INET_E_CANNOT_REPLACE_SFP_FILE";
-                errorType = wxWEB_NAV_ERR_SECURITY;
-                break;
-            case INET_E_CODE_INSTALL_BLOCKED_BY_HASH_POLICY:
-                errorCode = "INET_E_CODE_INSTALL_BLOCKED_BY_HASH_POLICY";
-                errorType = wxWEB_NAV_ERR_SECURITY;
-                break;
-            case INET_E_CODE_INSTALL_SUPPRESSED:
-                errorCode = "INET_E_CODE_INSTALL_SUPPRESSED";
-                errorType = wxWEB_NAV_ERR_SECURITY;
-                break;
-            }
+                // 400 Error codes
+                WX_ERROR_CASE(HTTP_STATUS_BAD_REQUEST, wxWEB_NAV_ERR_REQUEST)
+                WX_ERROR_CASE(HTTP_STATUS_DENIED, wxWEB_NAV_ERR_AUTH)
+                WX_ERROR_CASE(HTTP_STATUS_PAYMENT_REQ, wxWEB_NAV_ERR_OTHER)
+                WX_ERROR_CASE(HTTP_STATUS_FORBIDDEN, wxWEB_NAV_ERR_AUTH)
+                WX_ERROR_CASE(HTTP_STATUS_NOT_FOUND, wxWEB_NAV_ERR_NOT_FOUND)
+                WX_ERROR_CASE(HTTP_STATUS_BAD_METHOD, wxWEB_NAV_ERR_REQUEST)
+                WX_ERROR_CASE(HTTP_STATUS_NONE_ACCEPTABLE, wxWEB_NAV_ERR_OTHER)
+                WX_ERROR_CASE(HTTP_STATUS_PROXY_AUTH_REQ, wxWEB_NAV_ERR_AUTH)
+                WX_ERROR_CASE(HTTP_STATUS_REQUEST_TIMEOUT, wxWEB_NAV_ERR_CONNECTION)
+                WX_ERROR_CASE(HTTP_STATUS_CONFLICT, wxWEB_NAV_ERR_REQUEST)
+                WX_ERROR_CASE(HTTP_STATUS_GONE, wxWEB_NAV_ERR_NOT_FOUND)
+                WX_ERROR_CASE(HTTP_STATUS_LENGTH_REQUIRED, wxWEB_NAV_ERR_REQUEST)
+                WX_ERROR_CASE(HTTP_STATUS_PRECOND_FAILED, wxWEB_NAV_ERR_REQUEST)
+                WX_ERROR_CASE(HTTP_STATUS_REQUEST_TOO_LARGE, wxWEB_NAV_ERR_REQUEST)
+                WX_ERROR_CASE(HTTP_STATUS_URI_TOO_LONG, wxWEB_NAV_ERR_REQUEST)
+                WX_ERROR_CASE(HTTP_STATUS_UNSUPPORTED_MEDIA, wxWEB_NAV_ERR_REQUEST)
+                WX_ERROR_CASE(HTTP_STATUS_RETRY_WITH, wxWEB_NAV_ERR_OTHER)
 
-            wxString url = evt[1].GetString();
-            wxString target = evt[2].GetString();
-            wxWebViewEvent event(wxEVT_COMMAND_WEB_VIEW_ERROR, GetId(),
-                                 url, target);
-            event.SetEventObject(this);
-            event.SetInt(errorType);
-            event.SetString(errorCode);
+                // 500 - Error codes
+                WX_ERROR_CASE(HTTP_STATUS_SERVER_ERROR, wxWEB_NAV_ERR_CONNECTION)
+                WX_ERROR_CASE(HTTP_STATUS_NOT_SUPPORTED, wxWEB_NAV_ERR_CONNECTION)
+                WX_ERROR_CASE(HTTP_STATUS_BAD_GATEWAY, wxWEB_NAV_ERR_CONNECTION)
+                WX_ERROR_CASE(HTTP_STATUS_SERVICE_UNAVAIL, wxWEB_NAV_ERR_CONNECTION)
+                WX_ERROR_CASE(HTTP_STATUS_GATEWAY_TIMEOUT, wxWEB_NAV_ERR_CONNECTION)
+                WX_ERROR_CASE(HTTP_STATUS_VERSION_NOT_SUP, wxWEB_NAV_ERR_REQUEST)
+
+                // URL Moniker error codes
+                WX_ERROR_CASE(INET_E_INVALID_URL, wxWEB_NAV_ERR_REQUEST)
+                WX_ERROR_CASE(INET_E_NO_SESSION, wxWEB_NAV_ERR_CONNECTION)
+                WX_ERROR_CASE(INET_E_CANNOT_CONNECT, wxWEB_NAV_ERR_CONNECTION)
+                WX_ERROR_CASE(INET_E_RESOURCE_NOT_FOUND, wxWEB_NAV_ERR_NOT_FOUND)
+                WX_ERROR_CASE(INET_E_OBJECT_NOT_FOUND, wxWEB_NAV_ERR_NOT_FOUND)
+                WX_ERROR_CASE(INET_E_DATA_NOT_AVAILABLE, wxWEB_NAV_ERR_NOT_FOUND)
+                WX_ERROR_CASE(INET_E_DOWNLOAD_FAILURE, wxWEB_NAV_ERR_CONNECTION)
+                WX_ERROR_CASE(INET_E_AUTHENTICATION_REQUIRED, wxWEB_NAV_ERR_AUTH)
+                WX_ERROR_CASE(INET_E_NO_VALID_MEDIA, wxWEB_NAV_ERR_REQUEST)
+                WX_ERROR_CASE(INET_E_CONNECTION_TIMEOUT, wxWEB_NAV_ERR_CONNECTION)
+                WX_ERROR_CASE(INET_E_INVALID_REQUEST, wxWEB_NAV_ERR_REQUEST)
+                WX_ERROR_CASE(INET_E_UNKNOWN_PROTOCOL, wxWEB_NAV_ERR_REQUEST)
+                WX_ERROR_CASE(INET_E_SECURITY_PROBLEM, wxWEB_NAV_ERR_SECURITY)
+                WX_ERROR_CASE(INET_E_CANNOT_LOAD_DATA, wxWEB_NAV_ERR_OTHER)
+                WX_ERROR_CASE(INET_E_REDIRECT_FAILED, wxWEB_NAV_ERR_OTHER)
+                WX_ERROR_CASE(INET_E_REDIRECT_TO_DIR, wxWEB_NAV_ERR_REQUEST)
+                WX_ERROR_CASE(INET_E_CANNOT_LOCK_REQUEST, wxWEB_NAV_ERR_OTHER)
+                WX_ERROR_CASE(INET_E_USE_EXTEND_BINDING, wxWEB_NAV_ERR_OTHER)
+                WX_ERROR_CASE(INET_E_TERMINATED_BIND, wxWEB_NAV_ERR_OTHER)
+                WX_ERROR_CASE(INET_E_INVALID_CERTIFICATE, wxWEB_NAV_ERR_CERTIFICATE)
+                WX_ERROR_CASE(INET_E_CODE_DOWNLOAD_DECLINED, wxWEB_NAV_ERR_USER_CANCELLED)
+                WX_ERROR_CASE(INET_E_RESULT_DISPATCHED, wxWEB_NAV_ERR_OTHER)
+                WX_ERROR_CASE(INET_E_CANNOT_REPLACE_SFP_FILE, wxWEB_NAV_ERR_SECURITY)
+                WX_ERROR_CASE(INET_E_CODE_INSTALL_BLOCKED_BY_HASH_POLICY, wxWEB_NAV_ERR_SECURITY)
+                WX_ERROR_CASE(INET_E_CODE_INSTALL_SUPPRESSED, wxWEB_NAV_ERR_SECURITY)
+            }
             HandleWindowEvent(event);
             break;
         }
@@ -1173,7 +1426,7 @@ END_IID_TABLE;
 
 IMPLEMENT_IUNKNOWN_METHODS(VirtualProtocol)
 
-HRESULT VirtualProtocol::Start(LPCWSTR szUrl, wxIInternetProtocolSink *pOIProtSink,
+HRESULT STDMETHODCALLTYPE VirtualProtocol::Start(LPCWSTR szUrl, wxIInternetProtocolSink *pOIProtSink,
                                wxIInternetBindInfo *pOIBindInfo, DWORD grfPI,
                                HANDLE_PTR dwReserved)
 {
@@ -1200,7 +1453,7 @@ HRESULT VirtualProtocol::Start(LPCWSTR szUrl, wxIInternetProtocolSink *pOIProtSi
     return S_OK;
 }
 
-HRESULT VirtualProtocol::Read(void *pv, ULONG cb, ULONG *pcbRead)
+HRESULT STDMETHODCALLTYPE VirtualProtocol::Read(void *pv, ULONG cb, ULONG *pcbRead)
 {
     //If the file is null we return false to indicte it is finished
     if(!m_file)
@@ -1246,7 +1499,7 @@ END_IID_TABLE;
 
 IMPLEMENT_IUNKNOWN_METHODS(ClassFactory)
 
-HRESULT ClassFactory::CreateInstance(IUnknown* pUnkOuter, REFIID riid,
+HRESULT STDMETHODCALLTYPE ClassFactory::CreateInstance(IUnknown* pUnkOuter, REFIID riid,
                                      void ** ppvObject)
 {
     if (pUnkOuter)
@@ -1288,7 +1541,7 @@ bool wxIEContainer::QueryClientSiteInterface(REFIID iid, void **_interface,
     return false;
 }
 
-HRESULT DocHostUIHandler::ShowContextMenu(DWORD dwID, POINT *ppt,
+HRESULT wxSTDCALL DocHostUIHandler::ShowContextMenu(DWORD dwID, POINT *ppt,
                                           IUnknown *pcmdtReserved,
                                           IDispatch *pdispReserved)
 {
@@ -1296,17 +1549,20 @@ HRESULT DocHostUIHandler::ShowContextMenu(DWORD dwID, POINT *ppt,
     wxUnusedVar(ppt);
     wxUnusedVar(pcmdtReserved);
     wxUnusedVar(pdispReserved);
-    return E_NOTIMPL;
+    if(m_browser->IsContextMenuEnabled()) 
+        return E_NOTIMPL; 
+    else 
+        return S_OK; 
 }
 
-HRESULT DocHostUIHandler::GetHostInfo(DOCHOSTUIINFO *pInfo)
+HRESULT wxSTDCALL DocHostUIHandler::GetHostInfo(DOCHOSTUIINFO *pInfo)
 {
     //don't show 3d border and enable themes.
     pInfo->dwFlags = pInfo->dwFlags | DOCHOSTUIFLAG_NO3DBORDER | DOCHOSTUIFLAG_THEME;
     return S_OK;
 }
 
-HRESULT DocHostUIHandler::ShowUI(DWORD dwID,
+HRESULT wxSTDCALL DocHostUIHandler::ShowUI(DWORD dwID,
                                  IOleInPlaceActiveObject *pActiveObject,
                                  IOleCommandTarget *pCommandTarget,
                                  IOleInPlaceFrame *pFrame,
@@ -1320,35 +1576,35 @@ HRESULT DocHostUIHandler::ShowUI(DWORD dwID,
     return S_FALSE;
 }
 
-HRESULT DocHostUIHandler::HideUI(void)
+HRESULT wxSTDCALL DocHostUIHandler::HideUI(void)
 {
     return E_NOTIMPL;
 }
 
-HRESULT DocHostUIHandler::UpdateUI(void)
+HRESULT wxSTDCALL DocHostUIHandler::UpdateUI(void)
 {
     return E_NOTIMPL;
 }
 
-HRESULT DocHostUIHandler::EnableModeless(BOOL fEnable)
+HRESULT wxSTDCALL DocHostUIHandler::EnableModeless(BOOL fEnable)
 {
     wxUnusedVar(fEnable);
     return E_NOTIMPL;
 }
 
-HRESULT DocHostUIHandler::OnDocWindowActivate(BOOL fActivate)
+HRESULT wxSTDCALL DocHostUIHandler::OnDocWindowActivate(BOOL fActivate)
 {
     wxUnusedVar(fActivate);
     return E_NOTIMPL;
 }
 
-HRESULT DocHostUIHandler::OnFrameWindowActivate(BOOL fActivate)
+HRESULT wxSTDCALL DocHostUIHandler::OnFrameWindowActivate(BOOL fActivate)
 {
     wxUnusedVar(fActivate);
     return E_NOTIMPL;
 }
 
-HRESULT DocHostUIHandler::ResizeBorder(LPCRECT prcBorder,
+HRESULT wxSTDCALL DocHostUIHandler::ResizeBorder(LPCRECT prcBorder,
                                        IOleInPlaceUIWindow *pUIWindow,
                                        BOOL fFrameWindow)
 {
@@ -1358,7 +1614,7 @@ HRESULT DocHostUIHandler::ResizeBorder(LPCRECT prcBorder,
     return E_NOTIMPL;
 }
 
-HRESULT DocHostUIHandler::TranslateAccelerator(LPMSG lpMsg,
+HRESULT wxSTDCALL DocHostUIHandler::TranslateAccelerator(LPMSG lpMsg,
                                                const GUID *pguidCmdGroup,
                                                DWORD nCmdID)
 {
@@ -1390,14 +1646,14 @@ HRESULT DocHostUIHandler::TranslateAccelerator(LPMSG lpMsg,
     return E_NOTIMPL;
 }
 
-HRESULT DocHostUIHandler::GetOptionKeyPath(LPOLESTR *pchKey,DWORD dw)
+HRESULT wxSTDCALL DocHostUIHandler::GetOptionKeyPath(LPOLESTR *pchKey,DWORD dw)
 {
     wxUnusedVar(pchKey);
     wxUnusedVar(dw);
     return E_NOTIMPL;
 }
 
-HRESULT DocHostUIHandler::GetDropTarget(IDropTarget *pDropTarget,
+HRESULT wxSTDCALL DocHostUIHandler::GetDropTarget(IDropTarget *pDropTarget,
                                         IDropTarget **ppDropTarget)
 {
     wxUnusedVar(pDropTarget);
@@ -1405,13 +1661,13 @@ HRESULT DocHostUIHandler::GetDropTarget(IDropTarget *pDropTarget,
     return E_NOTIMPL;
 }
 
-HRESULT DocHostUIHandler::GetExternal(IDispatch **ppDispatch)
+HRESULT wxSTDCALL DocHostUIHandler::GetExternal(IDispatch **ppDispatch)
 {
     wxUnusedVar(ppDispatch);
     return E_NOTIMPL;
 }
 
-HRESULT DocHostUIHandler::TranslateUrl(DWORD dwTranslate,
+HRESULT wxSTDCALL DocHostUIHandler::TranslateUrl(DWORD dwTranslate,
                                        OLECHAR *pchURLIn,
                                        OLECHAR **ppchURLOut)
 {
@@ -1421,7 +1677,7 @@ HRESULT DocHostUIHandler::TranslateUrl(DWORD dwTranslate,
     return E_NOTIMPL;
 }
 
-HRESULT DocHostUIHandler::FilterDataObject(IDataObject *pDO, IDataObject **ppDORet)
+HRESULT wxSTDCALL DocHostUIHandler::FilterDataObject(IDataObject *pDO, IDataObject **ppDORet)
 {
     wxUnusedVar(pDO);
     wxUnusedVar(ppDORet);

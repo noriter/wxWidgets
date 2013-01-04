@@ -147,9 +147,7 @@ OSStatus wxMacDrawCGImage(
 
 CGColorRef wxMacCreateCGColor( const wxColour& col )
 {
-    CGColorRef retval = 0;
-
-    retval = col.CreateCGColor();
+    CGColorRef retval = col.CreateCGColor();
 
     wxASSERT(retval != NULL);
     return retval;
@@ -1488,7 +1486,7 @@ public:
     // fast convenience methods
     
     
-    virtual void DrawRectangleX( wxDouble x, wxDouble y, wxDouble w, wxDouble h ); 
+    virtual void DrawRectangle( wxDouble x, wxDouble y, wxDouble w, wxDouble h ); 
 
     void SetNativeContext( CGContextRef cg );
 
@@ -1921,7 +1919,7 @@ bool wxMacCoreGraphicsContext::SetCompositionMode(wxCompositionMode op)
            mode = kCGBlendModeDestinationAtop;
             break;
         case wxCOMPOSITION_XOR:
-            mode = kCGBlendModeXOR;
+            mode = kCGBlendModeExclusion; // Not kCGBlendModeXOR!
             break;
 
         case wxCOMPOSITION_ADD:
@@ -2708,10 +2706,17 @@ void * wxMacCoreGraphicsContext::GetNativeContext()
 }
 
 
-void wxMacCoreGraphicsContext::DrawRectangleX( wxDouble x, wxDouble y, wxDouble w, wxDouble h )
+void wxMacCoreGraphicsContext::DrawRectangle( wxDouble x, wxDouble y, wxDouble w, wxDouble h )
 {
     if (m_composition == wxCOMPOSITION_DEST) 
         return; 
+
+    // when using shading, we have to go back to drawing paths 
+    if ( !m_brush.IsNull() && ((wxMacCoreGraphicsBrushData*)m_brush.GetRefData())->IsShading() )
+    {
+        wxGraphicsContext::DrawRectangle( x,y,w,h );
+        return;
+    }
 
     CGRect rect = CGRectMake( (CGFloat) x , (CGFloat) y , (CGFloat) w , (CGFloat) h );
     if ( !m_brush.IsNull() )

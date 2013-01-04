@@ -834,7 +834,8 @@ wxChar32* wxStrdup(const wxChar32* s)
 {
   size_t size = (wxStrlen(s) + 1) * sizeof(wxChar32);
   wxChar32 *ret = (wxChar32*) malloc(size);
-  memcpy(ret, s, size);
+  if ( ret )
+      memcpy(ret, s, size);
   return ret;
 }
 #endif
@@ -975,23 +976,35 @@ wxCRT_StrtoullBase(const T* nptr, T** endptr, int base, T* sign)
         }
     }
 
-    // Starts with 0x?
+    // Starts with octal or hexadecimal prefix?
     if ( i != end && *i == wxT('0') )
     {
         ++i;
         if ( i != end )
         {
-            if ( *i == wxT('x') && (base == 16 || base == 0) )
+            if ( (*i == wxT('x')) || (*i == wxT('X')) )
             {
-                base = 16;
-                ++i;
+                // Hexadecimal prefix: use base 16 if auto-detecting.
+                if ( base == 0 )
+                    base = 16;
+
+                // If we do use base 16, just skip "x" as well.
+                if ( base == 16 )
+                {
+                    ++i;
+                }
+                else // Not using base 16
+                {
+                    // Then it's an error.
+                    if ( endptr )
+                        *endptr = (T*) nptr;
+                    wxSET_ERRNO(EINVAL);
+                    return sum;
+                }
             }
-            else
+            else if ( base == 0 )
             {
-                if ( endptr )
-                    *endptr = (T*) nptr;
-                wxSET_ERRNO(EINVAL);
-                return sum;
+                base = 8;
             }
         }
         else

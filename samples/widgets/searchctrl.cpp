@@ -73,7 +73,7 @@ public:
 
     virtual wxControl *GetWidget() const { return m_srchCtrl; }
     virtual wxTextEntryBase *GetTextEntry() const { return m_srchCtrl; }
-    virtual void RecreateWidget() { CreateControl(); }
+    virtual void RecreateWidget();
 
     // lazy creation of the content
     virtual void CreateContent();
@@ -85,14 +85,12 @@ protected:
     void OnToggleSearchMenu(wxCommandEvent&);
 
     void OnSearch(wxCommandEvent& event);
+    void OnSearchCancel(wxCommandEvent& event);
 
     wxMenu* CreateTestMenu();
 
     // (re)create the control
     void CreateControl();
-
-    // reset the control parameters
-    void Reset();
 
 
     wxSearchCtrl*       m_srchCtrl;
@@ -115,6 +113,7 @@ BEGIN_EVENT_TABLE(SearchCtrlWidgetsPage, WidgetsPage)
     EVT_CHECKBOX(ID_MENU_CB, SearchCtrlWidgetsPage::OnToggleSearchMenu)
 
     EVT_SEARCHCTRL_SEARCH_BTN(wxID_ANY, SearchCtrlWidgetsPage::OnSearch)
+    EVT_SEARCHCTRL_CANCEL_BTN(wxID_ANY, SearchCtrlWidgetsPage::OnSearchCancel)
 END_EVENT_TABLE()
 
 // ============================================================================
@@ -140,7 +139,6 @@ void SearchCtrlWidgetsPage::CreateContent()
 {
     m_srchCtrl = NULL;
 
-    Reset();
     CreateControl();
 
 
@@ -176,10 +174,14 @@ void SearchCtrlWidgetsPage::CreateControl()
                                   wxSize(150, -1), style);
 }
 
-void SearchCtrlWidgetsPage::Reset()
+void SearchCtrlWidgetsPage::RecreateWidget()
 {
-}
+    CreateControl();
 
+    GetSizer()->Add(m_srchCtrl, wxSizerFlags().Centre().TripleBorder());
+
+    Layout();
+}
 
 wxMenu* SearchCtrlWidgetsPage::CreateTestMenu()
 {
@@ -229,6 +231,13 @@ void SearchCtrlWidgetsPage::OnToggleSearchMenu(wxCommandEvent&)
 void SearchCtrlWidgetsPage::OnSearch(wxCommandEvent& event)
 {
     wxLogMessage("Search button: search for \"%s\".", event.GetString());
+}
+
+void SearchCtrlWidgetsPage::OnSearchCancel(wxCommandEvent& event)
+{
+    wxLogMessage("Cancel button pressed.");
+
+    event.Skip();
 }
 
 #endif  //  wxUSE_SEARCHCTRL

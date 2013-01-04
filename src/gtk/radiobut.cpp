@@ -32,8 +32,6 @@ extern "C" {
 static
 void gtk_radiobutton_clicked_callback( GtkToggleButton *button, wxRadioButton *rb )
 {
-    if (!rb->m_hasVMT) return;
-
     if (g_blockEventsOnDrag) return;
 
     if (!gtk_toggle_button_get_active(button)) return;
@@ -183,14 +181,7 @@ wxRadioButton::GTKGetWindow(wxArrayGdkWindows& WXUNUSED(windows)) const
 wxVisualAttributes
 wxRadioButton::GetClassDefaultAttributes(wxWindowVariant WXUNUSED(variant))
 {
-    wxVisualAttributes attr;
-    // NB: we need toplevel window so that GTK+ can find the right style
-    GtkWidget *wnd = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    GtkWidget* widget = gtk_radio_button_new_with_label(NULL, "");
-    gtk_container_add(GTK_CONTAINER(wnd), widget);
-    attr = GetDefaultAttributesFromGTKWidget(widget);
-    gtk_widget_destroy(wnd);
-    return attr;
+    return GetDefaultAttributesFromGTKWidget(gtk_radio_button_new_with_label(NULL, ""));
 }
 
 

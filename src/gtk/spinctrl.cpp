@@ -39,7 +39,7 @@ extern "C" {
 static void
 gtk_value_changed(GtkSpinButton* spinbutton, wxSpinCtrlGTKBase* win)
 {
-    if (!win->m_hasVMT || g_blockEventsOnDrag)
+    if (g_blockEventsOnDrag)
         return;
 
     if (wxIsKindOf(win, wxSpinCtrl))
@@ -69,9 +69,6 @@ extern "C" {
 static void
 gtk_changed(GtkSpinButton* spinbutton, wxSpinCtrl* win)
 {
-    if (!win->m_hasVMT)
-        return;
-
     wxCommandEvent event( wxEVT_COMMAND_TEXT_UPDATED, win->GetId() );
     event.SetEventObject( win );
     event.SetString(gtk_entry_get_text(GTK_ENTRY(spinbutton)));
@@ -83,8 +80,6 @@ gtk_changed(GtkSpinButton* spinbutton, wxSpinCtrl* win)
 //-----------------------------------------------------------------------------
 // wxSpinCtrlGTKBase
 //-----------------------------------------------------------------------------
-
-IMPLEMENT_DYNAMIC_CLASS(wxSpinCtrlGTKBase, wxSpinCtrlBase)
 
 BEGIN_EVENT_TABLE(wxSpinCtrlGTKBase, wxSpinCtrlBase)
     EVT_CHAR(wxSpinCtrlGTKBase::OnChar)
@@ -342,24 +337,123 @@ GdkWindow *wxSpinCtrlGTKBase::GTKGetWindow(wxArrayGdkWindows& windows) const
 
 wxSize wxSpinCtrlGTKBase::DoGetBestSize() const
 {
-    wxSize ret( wxControl::DoGetBestSize() );
-    wxSize best(95, ret.y); // FIXME: 95?
-    CacheBestSize(best);
-    return best;
+    return DoGetSizeFromTextSize(95); // TODO: 95 is completely arbitrary
+}
+
+wxSize wxSpinCtrlGTKBase::DoGetSizeFromTextSize(int xlen, int ylen) const
+{
+    wxASSERT_MSG( m_widget, wxS("GetSizeFromTextSize called before creation") );
+
+    // Set an as small as possible size for the control, so preferred sizes
+    // return "natural" sizes, not taking into account the previous ones (which
+    // seems to be GTK+3 behaviour)
+    gtk_widget_set_size_request(m_widget, 0, 0);
+
+    // Both Gtk+2 and Gtk+3 use current value/range to measure control's width.
+    // So, we can't ask Gtk+ for its width. Instead, we used hardcoded values.
+
+    // Returned height is OK
+    wxSize totalS = GTKGetPreferredSize(m_widget);
+
+#if GTK_CHECK_VERSION(3,4,0)
+    // two buttons in horizontal
+    totalS.x = 46 + 15; // margins included
+#else
+    // two small buttons in vertical
+    totalS.x = GetFont().GetPixelSize().y + 13; // margins included
+#endif
+
+    wxSize tsize(xlen + totalS.x, totalS.y);
+
+    // Check if the user requested a non-standard height.
+    if ( ylen > 0 )
+        tsize.IncBy(0, ylen - GetCharHeight());
+
+    return tsize;
 }
 
 // static
 wxVisualAttributes
 wxSpinCtrlGTKBase::GetClassDefaultAttributes(wxWindowVariant WXUNUSED(variant))
 {
-    // TODO: overload to accept functions like gtk_spin_button_new?
-    // Until then use a similar type
-    return GetDefaultAttributesFromGTKWidget(gtk_entry_new, true);
+    return GetDefaultAttributesFromGTKWidget(gtk_spin_button_new_with_range(0, 100, 1), true);
 }
 
 //-----------------------------------------------------------------------------
 // wxSpinCtrl
 //-----------------------------------------------------------------------------
+
+extern "C"
+{
+
+static gboolean
+wx_gtk_spin_input(GtkSpinButton* spin, gdouble* val, wxSpinCtrl* win)
+{
+    // We might use g_ascii_strtoll() here but it's 2.12+ only, so use our own
+    // wxString function even if this requires an extra conversion.
+    const wxString
+        text(wxString::FromUTF8(gtk_entry_get_text(GTK_ENTRY(spin))));
+
+    long lval;
+    if ( !text.ToLong(&lval, win->GetBase()) )
+        return FALSE;
+
+    *val = lval;
+
+    return TRUE;
+}
+
+static gint
+wx_gtk_spin_output(GtkSpinButton* spin, wxSpinCtrl* win)
+{
+    const gint val = gtk_spin_button_get_value_as_int(spin);
+
+    gtk_entry_set_text
+    (
+        GTK_ENTRY(spin),
+        wxPrivate::wxSpinCtrlFormatAsHex(val, win->GetMax()).utf8_str()
+    );
+
+    return TRUE;
+}
+
+} // extern "C"
+
+bool wxSpinCtrl::SetBase(int base)
+{
+    // Currently we only support base 10 and 16. We could add support for base
+    // 8 quite easily but wxMSW doesn't support it natively so don't bother
+    // with doing something wxGTK-specific here.
+    if ( base != 10 && base != 16 )
+        return false;
+
+    if ( base == m_base )
+        return true;
+
+    m_base = base;
+
+    // We need to be able to enter letters for any base greater than 10.
+    gtk_spin_button_set_numeric( GTK_SPIN_BUTTON(m_widget), m_base <= 10 );
+
+    if ( m_base != 10 )
+    {
+        g_signal_connect( m_widget, "input",
+                              G_CALLBACK(wx_gtk_spin_input), this);
+        g_signal_connect( m_widget, "output",
+                              G_CALLBACK(wx_gtk_spin_output), this);
+    }
+    else
+    {
+        g_signal_handlers_disconnect_by_func(m_widget,
+                                             (gpointer)wx_gtk_spin_input,
+                                             this);
+        g_signal_handlers_disconnect_by_func(m_widget,
+                                             (gpointer)wx_gtk_spin_output,
+                                             this);
+    }
+
+    return true;
+}
 
 //-----------------------------------------------------------------------------
 // wxSpinCtrlDouble

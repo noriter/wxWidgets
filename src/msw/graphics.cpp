@@ -78,6 +78,31 @@ inline Color wxColourToColor(const wxColour& col)
     return Color(col.Alpha(), col.Red(), col.Green(), col.Blue());
 }
 
+// Do not use this pointer directly, it's only used by
+// GetDrawTextStringFormat() and the cleanup code in wxGDIPlusRendererModule.
+StringFormat* gs_drawTextStringFormat = NULL;
+
+// Get the string format used for the text drawing and measuring functions:
+// notice that it must be the same one for all of them, otherwise the drawn
+// text might be of different size than what measuring it returned.
+inline StringFormat* GetDrawTextStringFormat()
+{
+    if ( !gs_drawTextStringFormat )
+    {
+        gs_drawTextStringFormat = new StringFormat(StringFormat::GenericTypographic());
+
+        // This doesn't make any difference for DrawText() actually but we want
+        // this behaviour when measuring text.
+        gs_drawTextStringFormat->SetFormatFlags
+        (
+            gs_drawTextStringFormat->GetFormatFlags()
+                | StringFormatFlagsMeasureTrailingSpaces
+        );
+    }
+
+    return gs_drawTextStringFormat;
+}
+
 } // anonymous namespace
 
 //-----------------------------------------------------------------------------
@@ -347,6 +372,13 @@ public:
 
     // stroke lines connecting each of the points
     virtual void StrokeLines( size_t n, const wxPoint2DDouble *points);
+
+    // We don't have any specific implementation for this one in wxMSW but
+    // override it just to avoid warnings about hiding the base class virtual.
+    virtual void StrokeLines( size_t n, const wxPoint2DDouble *beginPoints, const wxPoint2DDouble *endPoints)
+    {
+        wxGraphicsContext::StrokeLines(n, beginPoints, endPoints);
+    }
 
     // draws a polygon
     virtual void DrawLines( size_t n, const wxPoint2DDouble *points, wxPolygonFillMode fillStyle = wxODDEVEN_RULE );
@@ -1752,7 +1784,7 @@ void wxGDIPlusContext::DoDrawText(const wxString& str,
                     -1,                     // length: string is NUL-terminated
                     fontData->GetGDIPlusFont(),
                     PointF(x, y),
-                    StringFormat::GenericTypographic(),
+                    GetDrawTextStringFormat(),
                     fontData->GetGDIPlusBrush()
                );
 }
@@ -1794,11 +1826,9 @@ void wxGDIPlusContext::GetTextExtent( const wxString &str, wxDouble *width, wxDo
     else
     {
         RectF layoutRect(0,0, 100000.0f, 100000.0f);
-        StringFormat strFormat( StringFormat::GenericTypographic() );
-        strFormat.SetFormatFlags( StringFormatFlagsMeasureTrailingSpaces | strFormat.GetFormatFlags() );
 
         RectF bounds ;
-        m_context->MeasureString((const wchar_t *) s , wcslen(s) , f, layoutRect, &strFormat, &bounds ) ;
+        m_context->MeasureString((const wchar_t *) s , wcslen(s) , f, layoutRect, GetDrawTextStringFormat(), &bounds ) ;
         if ( width )
             *width = bounds.Width;
         if ( height )
@@ -1822,7 +1852,7 @@ void wxGDIPlusContext::GetPartialTextExtents(const wxString& text, wxArrayDouble
     wxASSERT_MSG(text.length() == len , wxT("GetPartialTextExtents not yet implemented for multichar situations"));
 
     RectF layoutRect(0,0, 100000.0f, 100000.0f);
-    StringFormat strFormat( StringFormat::GenericTypographic() );
+    StringFormat strFormat( GetDrawTextStringFormat() );
 
     size_t startPosition = 0;
     size_t remainder = len;
@@ -1840,7 +1870,6 @@ void wxGDIPlusContext::GetPartialTextExtents(const wxString& text, wxArrayDouble
             ranges[i].Length = startPosition+i+1 ;
         }
         strFormat.SetMeasurableCharacterRanges(span,ranges);
-        strFormat.SetFormatFlags( StringFormatFlagsMeasureTrailingSpaces | strFormat.GetFormatFlags() );
         m_context->MeasureCharacterRanges(ws, -1 , f,layoutRect, &strFormat,span,regions) ;
 
         RectF bbox ;
@@ -2254,8 +2283,19 @@ wxGraphicsBitmap wxGDIPlusRenderer::CreateSubBitmap( const wxGraphicsBitmap &bit
 class wxGDIPlusRendererModule : public wxModule
 {
 public:
+    wxGDIPlusRendererModule()
+    {
+        // We must be uninitialized before GDI+ DLL itself is unloaded.
+        AddDependency("wxGdiPlusModule");
+    }
+
     virtual bool OnInit() { return true; }
-    virtual void OnExit() { gs_GDIPlusRenderer.Unload(); }
+    virtual void OnExit()
+    {
+        wxDELETE(gs_drawTextStringFormat);
+
+        gs_GDIPlusRenderer.Unload();
+    }
 
 private:
     DECLARE_DYNAMIC_CLASS(wxGDIPlusRendererModule)

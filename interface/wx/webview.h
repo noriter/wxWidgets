@@ -70,6 +70,30 @@ enum wxWebViewReloadFlags
 };
 
 /**
+    Find flags used when searching for text on page.
+*/
+enum wxWebViewFindFlags
+{
+    /** Causes the search to restart when end or beginning reached */
+    wxWEB_VIEW_FIND_WRAP =             0x0001,
+
+    /** Matches an entire word when searching */
+    wxWEB_VIEW_FIND_ENTIRE_WORD =      0x0002,
+
+    /** Match case, i.e. case sensitive searching */
+    wxWEB_VIEW_FIND_MATCH_CASE =       0x0004,
+
+    /** Highlights the search results */
+    wxWEB_VIEW_FIND_HIGHLIGHT_RESULT = 0x0008,
+
+    /** Searches for phrase in backward direction */
+    wxWEB_VIEW_FIND_BACKWARDS =        0x0010,
+
+    /** The default flag, which is simple searching */
+    wxWEB_VIEW_FIND_DEFAULT =          0
+};
+
+/**
  * List of available backends for wxWebView
  */
 enum wxWebViewBackend
@@ -207,10 +231,13 @@ public:
     wxFSFile which represents the given url. You can then register your handler
     with RegisterHandler() it will be called for all pages and resources.
 
-    wxWebFileHandler is provided to allow the navigation of pages inside a zip
-    archive. It overrides the @c file scheme and provides support for the
-    standard @c file syntax as well as paths to archives of the form
-    @c file:///C:/example/docs.zip;protocol=zip/main.htm
+    wxWebViewFSHandler is provided to access the virtual file system encapsulated by
+    wxFileSystem. The wxMemoryFSHandler documentation gives an example of how this
+    may be used.
+
+    wxWebViewArchiveHandler is provided to allow the navigation of pages inside a zip
+    archive. It supports paths of the form:
+    @c scheme:///C:/example/docs.zip;protocol=zip/main.htm
 
     @beginEventEmissionTable{wxWebViewEvent}
     @event{EVT_WEB_VIEW_NAVIGATING(id, func)}
@@ -305,6 +332,34 @@ public:
     virtual wxString GetCurrentURL() const = 0;
 
     /**
+        Return the pointer to the native backend used by this control.
+
+        This method can be used to retrieve the pointer to the native rendering
+        engine used by this control. The return value needs to be down-casted
+        to the appropriate type depending on the platform: under Windows, it's
+        a pointer to IWebBrowser2 interface, under OS X it's a WebView pointer
+        and under GTK it's a WebKitWebView.
+
+        For example, you could set the WebKit options using this method:
+        @code
+            #include <webkit/webkit.h>
+
+            #ifdef __WXGTK__
+               WebKitWebView*
+                wv = static_cast<WebKitWebView*>(m_window->GetNativeBackend());
+
+               WebKitWebSettings* settings = webkit_web_view_get_settings(wv);
+               g_object_set(G_OBJECT(settings),
+                            "enable-frame-flattening", TRUE,
+                            NULL);
+            #endif
+        @endcode
+
+        @since 2.9.5
+     */
+    virtual void* GetNativeBackend() const = 0;
+
+    /**
         Get the HTML source code of the currently displayed document.
         @return The HTML source code, or an empty string if no page is currently
                 shown.
@@ -317,7 +372,7 @@ public:
     virtual wxString GetPageText() const = 0;
 
     /**
-        Returns whether the web control is currently busy (e.g. loading a page).
+        Returns whether the web control is currently busy (e.g.\ loading a page).
     */
     virtual bool IsBusy() const = 0;
 
@@ -355,6 +410,8 @@ public:
 
     /**
         Runs the given javascript code.
+        @note When using wxWEB_VIEW_BACKEND_IE you must wait for the current
+              page to finish loading before calling RunScript().
     */
     virtual void RunScript(const wxString& javascript) = 0;
 
@@ -370,6 +427,8 @@ public:
         @param html    The string that contains the HTML data to display.
         @param baseUrl URL assigned to the HTML data, to be used to resolve
                     relative paths, for instance.
+        @note When using wxWEB_VIEW_BACKEND_IE you must wait for the current
+              page to finish loading before calling SetPage().
     */
     virtual void SetPage(const wxString& html, const wxString& baseUrl) = 0;
 
@@ -427,6 +486,27 @@ public:
         Pastes the current data.
     */
     virtual void Paste() = 0;
+
+    /**
+        @name Context Menu
+    */
+
+    /**
+        Enable or disable the right click context menu.
+
+        By default the standard context menu is enabled, this method can be
+        used to disable it or re-enable it later.
+
+        @since 2.9.5
+    */
+    virtual void EnableContextMenu(bool enable = true);
+
+   /**
+        Returns @true if a context menu will be shown on right click.
+
+        @since 2.9.5
+    */
+    virtual bool IsContextMenuEnabled() const;
 
     /**
         @name History
@@ -543,6 +623,30 @@ public:
         Undos the last action.
     */
     virtual void Undo() = 0;
+
+    /**
+        @name Finding
+    */
+
+    /**
+        Finds a phrase on the current page and if found, the control will
+        scroll the phrase into view and select it.
+        @param text The phrase to search for.
+        @param flags The flags for the search.
+        @return If search phrase was not found in combination with the flags
+                then @c wxNOT_FOUND is returned. If called for the first time
+                with search phrase then the total number of results will be
+                returned. Then for every time its called with the same search
+                phrase it will return the number of the current match.
+        @note This function will restart the search if the flags
+              @c wxWEB_VIEW_FIND_ENTIRE_WORD or @c wxWEB_VIEW_FIND_MATCH_CASE
+              are changed, since this will require a new search. To reset the
+              search, for example reseting the highlights call the function
+              with an empty search phrase. This always returns @c wxNOT_FOUND
+              on the OSX WebKit backend.
+        @since 2.9.5
+    */
+    virtual long Find(const wxString& text, wxWebViewFindFlags flags = wxWEB_VIEW_FIND_DEFAULT) = 0;
 
     /**
         @name Zoom

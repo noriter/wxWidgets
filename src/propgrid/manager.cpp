@@ -1906,6 +1906,11 @@ void wxPropertyGridManager::OnResize( wxSizeEvent& WXUNUSED(event) )
             }
         }
     }
+
+#if wxUSE_HEADERCTRL
+    if ( m_showHeader )
+        m_pHeaderCtrl->OnColumWidthsChanged();
+#endif
 }
 
 // -----------------------------------------------------------------------
@@ -2003,7 +2008,7 @@ void wxPropertyGridManager::OnMouseClick( wxMouseEvent &event )
 
 void wxPropertyGridManager::OnMouseUp( wxMouseEvent &event )
 {
-    // No event type check - basicly calling this method should
+    // No event type check - basically calling this method should
     // just stop dragging.
 
     if ( m_dragStatus >= 1 )

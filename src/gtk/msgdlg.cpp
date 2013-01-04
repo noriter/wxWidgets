@@ -24,6 +24,8 @@
     #include "wx/intl.h"
 #endif
 
+#include "wx/testing.h"
+
 #include <gtk/gtk.h>
 #include "wx/gtk/private.h"
 #include "wx/gtk/private/messagetype.h"
@@ -166,19 +168,13 @@ void wxMessageDialog::GTKCreateMsgDialog()
     }
 
     wxString message;
-#if GTK_CHECK_VERSION(2, 6, 0)
     bool needsExtMessage = false;
-    if (!m_extendedMessage.empty()
-#ifndef __WXGTK3__
-        && gtk_check_version(2, 6, 0) == NULL
-#endif
-        )
+    if (!m_extendedMessage.empty())
     {
         message = m_message;
         needsExtMessage = true;
     }
-    else // extended message not needed or not supported
-#endif // GTK+ 2.6+
+    else // extended message not needed
     {
         message = GetFullMessage();
     }
@@ -190,7 +186,6 @@ void wxMessageDialog::GTKCreateMsgDialog()
                                       "%s",
                                       (const char*)wxGTK_CONV(message));
 
-#if GTK_CHECK_VERSION(2, 6, 0)
     if ( needsExtMessage )
     {
         gtk_message_dialog_format_secondary_text
@@ -200,7 +195,6 @@ void wxMessageDialog::GTKCreateMsgDialog()
             (const char *)wxGTK_CONV(m_extendedMessage)
         );
     }
-#endif // GTK+ 2.6+
 #endif // wxUSE_LIBHILDON || wxUSE_LIBHILDON2/!wxUSE_LIBHILDON && !wxUSE_LIBHILDON2
 
     g_object_ref(m_widget);
@@ -281,6 +275,8 @@ void wxMessageDialog::GTKCreateMsgDialog()
 
 int wxMessageDialog::ShowModal()
 {
+    WX_TESTING_SHOW_MODAL_HOOK();
+
     // break the mouse capture as it would interfere with modal dialog (see
     // wxDialog::ShowModal)
     wxWindow * const win = wxWindow::GetCapture();
@@ -300,6 +296,7 @@ int wxMessageDialog::ShowModal()
         gtk_window_present( GTK_WINDOW(m_parent->m_widget) );
 
     gint result = gtk_dialog_run(GTK_DIALOG(m_widget));
+    GTKDisconnect(m_widget);
     gtk_widget_destroy(m_widget);
     g_object_unref(m_widget);
     m_widget = NULL;

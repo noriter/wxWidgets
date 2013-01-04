@@ -653,8 +653,7 @@ WXDLLEXPORT pascal OSStatus wxMacUnicodeTextEventHandler( EventHandlerCallRef ha
     I don't have time to look into that right now.
         -- CL
 */
-                    if ( wxTheApp->MacSendCharEvent(
-                                                    focus , message , 0 , when , 0 , 0 , uniChars[pos] ) )
+                    if ( wxTheApp->MacSendCharEvent( focus , message , 0 , when , uniChars[pos] ) )
                     {
                         result = noErr ;
                     }
@@ -666,7 +665,6 @@ WXDLLEXPORT pascal OSStatus wxMacUnicodeTextEventHandler( EventHandlerCallRef ha
         case kEventTextInputUnicodeForKeyEvent :
             {
                 UInt32 keyCode, modifiers ;
-                Point point ;
                 EventRef rawEvent ;
                 unsigned char charCode ;
 
@@ -674,7 +672,6 @@ WXDLLEXPORT pascal OSStatus wxMacUnicodeTextEventHandler( EventHandlerCallRef ha
                 GetEventParameter( rawEvent, kEventParamKeyMacCharCodes, typeChar, NULL, sizeof(char), NULL, &charCode );
                 GetEventParameter( rawEvent, kEventParamKeyCode, typeUInt32, NULL, sizeof(UInt32), NULL, &keyCode );
                 GetEventParameter( rawEvent, kEventParamKeyModifiers, typeUInt32, NULL, sizeof(UInt32), NULL, &modifiers );
-                GetEventParameter( rawEvent, kEventParamMouseLocation, typeQDPoint, NULL, sizeof(Point), NULL, &point );
 
                 UInt32 message = (keyCode << 8) + charCode;
 
@@ -686,8 +683,7 @@ WXDLLEXPORT pascal OSStatus wxMacUnicodeTextEventHandler( EventHandlerCallRef ha
                     WXEVENTHANDLERCALLREF formerHandler = wxTheApp->MacGetCurrentEventHandlerCallRef() ;
                     wxTheApp->MacSetCurrentEvent( event , handler ) ;
 
-                    if ( wxTheApp->MacSendCharEvent(
-                        focus , message , modifiers , when , point.h , point.v , uniChars[pos] ) )
+                    if ( wxTheApp->MacSendCharEvent( focus , message , modifiers , when , uniChars[pos] ) )
                     {
                         result = noErr ;
                     }
@@ -1408,7 +1404,15 @@ void wxMacControl::Enable( bool enable )
 
 void wxMacControl::SetDrawingEnabled( bool enable )
 {
-    HIViewSetDrawingEnabled( m_controlRef , enable );
+    if ( enable )
+    {
+        HIViewSetDrawingEnabled( m_controlRef , true );
+        HIViewSetNeedsDisplay( m_controlRef, true);
+    }
+    else
+    {
+        HIViewSetDrawingEnabled( m_controlRef , false );
+    }
 }
 
 void wxMacControl::GetRectInWindowCoords( Rect *r )

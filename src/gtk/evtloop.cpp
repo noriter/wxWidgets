@@ -239,9 +239,7 @@ static void wxgtk_main_do_event(GdkEvent* event, void* data)
     case GDK_SELECTION_REQUEST:
     case GDK_SELECTION_NOTIFY:
     case GDK_SELECTION_CLEAR:
-#if GTK_CHECK_VERSION(2,6,0)
     case GDK_OWNER_CHANGE:
-#endif
         cat = wxEVT_CATEGORY_CLIPBOARD;
         break;
 
@@ -357,6 +355,11 @@ bool wxGUIEventLoop::YieldFor(long eventsToProcess)
         gtk_main_iteration();
     gdk_event_handler_set ((GdkEventFunc)gtk_main_do_event, NULL, NULL);
 
+    // Process all pending events too, this is consistent with wxMSW behaviour
+    // and the behaviour of wxGTK itself in the previous versions.
+    if ( wxTheApp )
+        wxTheApp->ProcessPendingEvents();
+
     if (eventsToProcess != wxEVT_CATEGORY_CLIPBOARD)
     {
         // It's necessary to call ProcessIdle() to update the frames sizes which
@@ -365,7 +368,7 @@ bool wxGUIEventLoop::YieldFor(long eventsToProcess)
         // call ProcessIdle() only once since this is not meant for longish
         // background jobs (controlled by wxIdleEvent::RequestMore() and the
         // return value of Processidle().
-        ProcessIdle();      // ProcessIdle() also calls ProcessPendingEvents()
+        ProcessIdle();
     }
     //else: if we are inside ~wxClipboardSync() and we call ProcessIdle() and
     //      the user app contains an UI update handler which calls wxClipboard::IsSupported,

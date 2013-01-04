@@ -72,23 +72,16 @@ bool wxStaticText::Create(wxWindow *parent,
 
     gtk_label_set_justify(GTK_LABEL(m_widget), justify);
 
-#ifdef __WXGTK26__
-#ifndef __WXGTK3__
-    if (!gtk_check_version(2,6,0))
-#endif
-    {
-        // set ellipsize mode
-        PangoEllipsizeMode ellipsizeMode = PANGO_ELLIPSIZE_NONE;
-        if ( style & wxST_ELLIPSIZE_START )
-            ellipsizeMode = PANGO_ELLIPSIZE_START;
-        else if ( style & wxST_ELLIPSIZE_MIDDLE )
-            ellipsizeMode = PANGO_ELLIPSIZE_MIDDLE;
-        else if ( style & wxST_ELLIPSIZE_END )
-            ellipsizeMode = PANGO_ELLIPSIZE_END;
+    // set ellipsize mode
+    PangoEllipsizeMode ellipsizeMode = PANGO_ELLIPSIZE_NONE;
+    if ( style & wxST_ELLIPSIZE_START )
+        ellipsizeMode = PANGO_ELLIPSIZE_START;
+    else if ( style & wxST_ELLIPSIZE_MIDDLE )
+        ellipsizeMode = PANGO_ELLIPSIZE_MIDDLE;
+    else if ( style & wxST_ELLIPSIZE_END )
+        ellipsizeMode = PANGO_ELLIPSIZE_END;
 
-        gtk_label_set_ellipsize( GTK_LABEL(m_widget), ellipsizeMode );
-    }
-#endif // __WXGTK26__
+    gtk_label_set_ellipsize( GTK_LABEL(m_widget), ellipsizeMode );
 
     // GTK_JUSTIFY_LEFT is 0, RIGHT 1 and CENTER 2
     static const float labelAlignments[] = { 0.0, 1.0, 0.5 };
@@ -111,20 +104,7 @@ void wxStaticText::GTKDoSetLabel(GTKLabelSetter setter, const wxString& label)
 
     InvalidateBestSize();
 
-#ifndef __WXGTK3__
-    if (gtk_check_version(2,6,0) && IsEllipsized())
-    {
-        // GTK+ < 2.6 does not support ellipsization so we need to do it
-        // manually and as our ellipsization code doesn't deal with markup, we
-        // have no choice but to ignore it in this case and always use plain
-        // text.
-        GTKSetLabelForLabel(GTK_LABEL(m_widget), GetEllipsizedLabel());
-    }
-    else // Ellipsization not needed or supported by GTK+.
-#endif
-    {
-        (this->*setter)(GTK_LABEL(m_widget), label);
-    }
+    (this->*setter)(GTK_LABEL(m_widget), label);
 
     // adjust the label size to the new label unless disabled
     if ( !HasFlag(wxST_NO_AUTORESIZE) &&
@@ -211,22 +191,6 @@ bool wxStaticText::SetFont( const wxFont &font )
     return ret;
 }
 
-void wxStaticText::DoSetSize(int x, int y,
-                             int width, int height,
-                             int sizeFlags )
-{
-    wxStaticTextBase::DoSetSize(x, y, width, height, sizeFlags);
-
-#ifndef __WXGTK3__
-    if (gtk_check_version(2,6,0))
-    {
-        // GTK+ < 2.6 does not support ellipsization - we need to run our
-        // generic code (actually it will be run only if IsEllipsized() == true)
-        UpdateLabel();
-    }
-#endif
-}
-
 wxSize wxStaticText::DoGetBestSize() const
 {
     // Do not return any arbitrary default value...
@@ -284,7 +248,7 @@ void wxStaticText::DoSetLabel(const wxString& str)
 wxVisualAttributes
 wxStaticText::GetClassDefaultAttributes(wxWindowVariant WXUNUSED(variant))
 {
-    return GetDefaultAttributesFromGTKWidget(gtk_label_new);
+    return GetDefaultAttributesFromGTKWidget(gtk_label_new(""));
 }
 
 #endif // wxUSE_STATTEXT

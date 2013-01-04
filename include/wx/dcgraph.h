@@ -68,9 +68,6 @@ public:
 
     virtual ~wxGCDCImpl();
 
-    void Init();
-
-
     // implement base class pure virtuals
     // ----------------------------------
 
@@ -111,6 +108,8 @@ public:
 
     wxGraphicsContext* GetGraphicsContext() const { return m_graphicContext; }
     virtual void SetGraphicsContext( wxGraphicsContext* ctx );
+
+    virtual void* GetHandle() const;
 
     // the true implementations
     virtual bool DoFloodFill(wxCoord x, wxCoord y, const wxColour& col,
@@ -204,6 +203,10 @@ public:
 #endif // __WXMSW__
 
 protected:
+    // unused int parameter distinguishes this version, which does not create a
+    // wxGraphicsContext, in the expectation that the derived class will do it
+    wxGCDCImpl(wxDC* owner, int);
+
     // scaling variables
     bool m_logicalFunctionSupported;
     wxGraphicsMatrix m_matrixOriginal;
@@ -212,6 +215,9 @@ protected:
     double m_formerScaleX, m_formerScaleY;
 
     wxGraphicsContext* m_graphicContext;
+
+private:
+    void Init(wxGraphicsContext*);
 
     DECLARE_CLASS(wxGCDCImpl)
     wxDECLARE_NO_COPY_CLASS(wxGCDCImpl);

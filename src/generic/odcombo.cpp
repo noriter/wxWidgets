@@ -277,12 +277,14 @@ bool wxVListBoxComboPopup::HandleKey( int keycode, bool saturate, wxChar keychar
             keychar = 0;
     }
 
-    if ( keycode == WXK_DOWN || keycode == WXK_NUMPAD_DOWN || keycode == WXK_RIGHT )
+    const bool readOnly = (comboStyle & wxCB_READONLY) != 0;
+
+    if ( keycode == WXK_DOWN || keycode == WXK_NUMPAD_DOWN || ( keycode == WXK_RIGHT && readOnly ) )
     {
         value++;
         StopPartialCompletion();
     }
-    else if ( keycode == WXK_UP || keycode == WXK_NUMPAD_UP || keycode == WXK_LEFT )
+    else if ( keycode == WXK_UP || keycode == WXK_NUMPAD_UP || ( keycode == WXK_LEFT && readOnly ) )
     {
         value--;
         StopPartialCompletion();
@@ -297,17 +299,17 @@ bool wxVListBoxComboPopup::HandleKey( int keycode, bool saturate, wxChar keychar
         value-=10;
         StopPartialCompletion();
     }
-    else if ( keycode == WXK_HOME || keycode == WXK_NUMPAD_HOME )
+    else if ( ( keycode == WXK_HOME || keycode == WXK_NUMPAD_HOME ) && readOnly )
     {
         value=0;
         StopPartialCompletion();
     }
-    else if ( keycode == WXK_END || keycode == WXK_NUMPAD_END )
+    else if ( ( keycode == WXK_END || keycode == WXK_NUMPAD_END ) && readOnly )
     {
         value=itemCount-1;
         StopPartialCompletion();
     }
-    else if ( keychar && (comboStyle & wxCB_READONLY) )
+    else if ( keychar && readOnly )
     {
         // Try partial completion
 
@@ -723,6 +725,8 @@ void wxVListBoxComboPopup::CalcWidths()
         // wxWindow::GetTextExtent (assuming same dc is used
         // for all calls, as we do here).
         wxClientDC dc(m_combo);
+        if ( !m_useFont.IsOk() )
+            m_useFont = m_combo->GetFont();
         dc.SetFont(m_useFont);
 
         for ( i=0; i<n; i++ )
@@ -1167,6 +1171,22 @@ wxCoord wxOwnerDrawnComboBox::OnMeasureItem( size_t WXUNUSED(item) ) const
 wxCoord wxOwnerDrawnComboBox::OnMeasureItemWidth( size_t WXUNUSED(item) ) const
 {
     return -1;
+}
+
+wxSize wxOwnerDrawnComboBox::DoGetBestSize() const
+{
+    wxSize best( wxComboCtrlBase::DoGetBestSize() );
+
+    if ( GetCount() > 0 )
+    {
+        wxOwnerDrawnComboBox* odc = const_cast<wxOwnerDrawnComboBox*>(this);
+        best.x = odc->GetWidestItemWidth();
+        // TODO: this class may also have GetHightestItemHeight() and
+        // GetHightestItem() methods, and so set the whole (edit part + arrow)
+        // control's height according with this max height, not only max width.
+    }
+
+    return GetSizeFromTextSize(best.x);
 }
 
 void wxOwnerDrawnComboBox::OnDrawBackground(wxDC& dc,

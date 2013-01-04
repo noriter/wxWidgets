@@ -59,10 +59,6 @@ public:
     virtual wxString GetPageSource() const;
     virtual wxString GetPageText() const;
 
-    //We do not want to hide the other overloads
-    using wxWebView::SetPage;
-    virtual void SetPage(const wxString& html, const wxString& baseUrl);
-
     virtual void Print();
 
     virtual void LoadURL(const wxString& url);
@@ -90,6 +86,14 @@ public:
     virtual void Undo();
     virtual void Redo();
 
+    //Find function
+    virtual long Find(const wxString& text, int flags = wxWEB_VIEW_FIND_DEFAULT) 
+    { 
+        wxUnusedVar(text);
+        wxUnusedVar(flags);
+        return wxNOT_FOUND; 
+    }
+
     //Clipboard functions
     virtual bool CanCut() const { return true; }
     virtual bool CanCopy() const { return true; }
@@ -114,6 +118,8 @@ public:
 
     //Virtual Filesystem Support
     virtual void RegisterHandler(wxSharedPtr<wxWebViewHandler> handler);
+
+    virtual void* GetNativeBackend() const { return m_webView; }
 
     // ---- methods not from the parent (common) interface
     bool  CanGetPageSource() const;
@@ -143,6 +149,8 @@ public:
     bool m_busy;
 
 protected:
+    virtual void DoSetPage(const wxString& html, const wxString& baseUrl);
+
     DECLARE_EVENT_TABLE()
     void MacVisibilityChanged();
 

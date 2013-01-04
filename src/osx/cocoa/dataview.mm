@@ -753,7 +753,7 @@ outlineView:(NSOutlineView*)outlineView
 
     // send first the event to wxWidgets that the sorting has changed so that
     // the program can do special actions before the sorting actually starts:
-    wxDataViewEvent event(wxEVT_COMMAND_DATAVIEW_COLUMN_SORTED,dvc->GetId()); // variable defintion
+    wxDataViewEvent event(wxEVT_COMMAND_DATAVIEW_COLUMN_SORTED,dvc->GetId()); // variable definition
 
     event.SetEventObject(dvc);
     if (noOfDescriptors > 0)
@@ -926,7 +926,8 @@ outlineView:(NSOutlineView*)outlineView
                     size_t const dataSize       = event.GetDataObject()->GetDataSize(idDataFormat);
                     size_t const dataBufferSize = sizeof(wxDataFormatId)+dataSize;
                     // variable definitions (used in all case statements):
-                    wxMemoryBuffer dataBuffer(dataBufferSize);
+                    // give additional headroom for trailing NULL
+                    wxMemoryBuffer dataBuffer(dataBufferSize+4);
 
                     dataBuffer.AppendData(&idDataFormat,sizeof(wxDataFormatId));
                     switch (idDataFormat)
@@ -958,7 +959,6 @@ outlineView:(NSOutlineView*)outlineView
                             break;
                         default:
                             wxFAIL_MSG("Data object has invalid or unsupported data format");
-                            [dataArray release];
                             return NO;
                     }
                 }
@@ -976,7 +976,6 @@ outlineView:(NSOutlineView*)outlineView
             }
             else
             {
-                [dataArray release];
                 delete itemObject;
                 return NO; // dragging was vetoed or no data available
             }
@@ -1166,6 +1165,23 @@ outlineView:(NSOutlineView*)outlineView
 // ============================================================================
 
 @implementation wxCustomCell
+
+#if 0 // starting implementation for custom cell clicks
+
+- (id)init
+{
+    self = [super init];
+    [self setAction:@selector(clickedAction)];
+    [self setTarget:self];
+    return self;
+}
+
+- (void) clickedAction: (id) sender
+{
+    wxUnusedVar(sender);
+}
+
+#endif
 
 -(NSSize) cellSize
 {
@@ -2697,7 +2713,7 @@ void wxDataViewRenderer::OSXApplyAttr(const wxDataViewItemAttr& attr)
             }
 
             const wxColour& c = attr.GetColour();
-            colText = [NSColor colorWithDeviceRed:c.Red() / 255.
+            colText = [NSColor colorWithCalibratedRed:c.Red() / 255.
                 green:c.Green() / 255.
                 blue:c.Blue() / 255.
                 alpha:c.Alpha() / 255.];

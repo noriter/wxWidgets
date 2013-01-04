@@ -283,6 +283,19 @@ public:
                      int flag = 0,
                      int border = 0,
                      wxObject* userData = NULL);
+    
+    /**
+        Appends a spacer child to the sizer.
+
+        @param width
+            Width of the spacer.
+        @param height
+            Height of the spacer.
+        @param flags
+            A wxSizerFlags object that enables you to specify most of the other
+            parameters more conveniently.
+    */
+    wxSizerItem* Add( int width, int height, const wxSizerFlags& flags);
 
     wxSizerItem* Add(wxSizerItem* item);
     
@@ -426,6 +439,11 @@ public:
     */
     wxWindow* GetContainingWindow() const;
 
+    /**
+       Set the window this sizer is used in.
+    */
+    void SetContainingWindow(wxWindow *window);
+    
     /**
        Returns the number of items in the sizer.
 
@@ -571,6 +589,15 @@ public:
                         int flag = 0,
                         int border = 0,
                         wxObject* userData = NULL);
+    /**
+        Insert a child into the sizer before any existing item at @a index.
+
+        See Add() for the meaning of the other parameters.
+    */
+    wxSizerItem* Insert(size_t index,
+                        int width,
+                        int height,
+                        const wxSizerFlags& flags);
 
     wxSizerItem* Insert(size_t index, wxSizerItem* item);
     
@@ -615,7 +642,7 @@ public:
     bool IsShown(size_t index) const;
 
     /**
-        Call this to force layout of the children anew, e.g. after having added a child
+        Call this to force layout of the children anew, e.g.\ after having added a child
         to or removed a child (window, other sizer or space) from the sizer while
         keeping the current dimension.
     */
@@ -661,6 +688,12 @@ public:
                          int flag = 0,
                          int border = 0,
                          wxObject* userData = NULL);
+
+    /**
+        Same as Add(), but prepends the items to the beginning of the
+        list of items (windows, subsizers or spaces) owned by this sizer.
+    */
+    wxSizerItem* Prepend(int width, int height, const wxSizerFlags& flags);
 
     wxSizerItem* Prepend(wxSizerItem* item);
     
@@ -893,6 +926,13 @@ public:
         @see Hide(), IsShown()
     */
     bool Show(size_t index, bool show = true);
+
+
+    /**
+       Show or hide all items managed by the sizer.
+    */
+    virtual void ShowItems(bool show);
+
 };
 
 
@@ -1842,6 +1882,12 @@ public:
         or wxHORIZONTAL.
     */
     int GetOrientation() const;
+
+    /**
+        Sets the orientation of the box sizer, either wxVERTICAL
+        or wxHORIZONTAL.
+    */
+    void SetOrientation(int orient);
 
     /**
         Implements the calculation of a box sizer's dimensions and then sets

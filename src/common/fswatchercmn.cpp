@@ -40,6 +40,16 @@ static wxString GetFSWEventChangeTypeName(int type)
         return "MODIFY";
     case wxFSW_EVENT_ACCESS:
         return "ACCESS";
+    case wxFSW_EVENT_ATTRIB: // Currently this is wxGTK-only
+        return "ATTRIBUTE";
+#ifdef wxHAS_INOTIFY
+    case wxFSW_EVENT_UNMOUNT: // Currently this is wxGTK-only
+        return "UNMOUNT";
+#endif
+    case wxFSW_EVENT_WARNING:
+        return "WARNING";
+    case wxFSW_EVENT_ERROR:
+        return "ERROR";
     }
 
     // should never be reached!
@@ -95,29 +105,41 @@ bool wxFileSystemWatcherBase::Add(const wxFileName& path, int events)
         return false;
     }
 
-    return DoAdd(path, events, type);
+    return AddAny(path, events, type);
 }
 
 bool
-wxFileSystemWatcherBase::DoAdd(const wxFileName& path,
-                               int events,
-                               wxFSWPathType type)
+wxFileSystemWatcherBase::AddAny(const wxFileName& path,
+                                int events,
+                                wxFSWPathType type,
+                                const wxString& filespec)
 {
     wxString canonical = GetCanonicalPath(path);
     if (canonical.IsEmpty())
         return false;
 
-    wxCHECK_MSG(m_watches.find(canonical) == m_watches.end(), false,
-                wxString::Format("Path '%s' is already watched", canonical));
-
     // adding a path in a platform specific way
-    wxFSWatchInfo watch(canonical, events, type);
+    wxFSWatchInfo watch(canonical, events, type, filespec);
     if ( !m_service->Add(watch) )
         return false;
 
-    // on success, add path to our 'watch-list'
-    wxFSWatchInfoMap::value_type val(canonical, watch);
-    return m_watches.insert(val).second;
+    // on success, either add path to our 'watch-list'
+    // or, if already watched, inc the refcount. This may happen if
+    // a dir is Add()ed, then later AddTree() is called on a parent dir
+    wxFSWatchInfoMap::iterator it = m_watches.find(canonical);
+    if ( it == m_watches.end() )
+    {
+        wxFSWatchInfoMap::value_type val(canonical, watch);
+        m_watches.insert(val).second;
+    }
+    else
+    {
+        wxFSWatchInfo& watch = it->second;
+        int count = watch.IncRef();
+        wxLogTrace(wxTRACE_FSWATCHER,
+                   "'%s' is now watched %d times", canonical, count);
+    }
+    return true;
 }
 
 bool wxFileSystemWatcherBase::Remove(const wxFileName& path)
@@ -131,16 +153,21 @@ bool wxFileSystemWatcherBase::Remove(const wxFileName& path)
     wxCHECK_MSG(it != m_watches.end(), false,
                 wxString::Format("Path '%s' is not watched", canonical));
 
-    // remove from watch-list
-    wxFSWatchInfo watch = it->second;
-    m_watches.erase(it);
+    // Decrement the watch's refcount and remove from watch-list if 0
+    bool ret = true;
+    wxFSWatchInfo& watch = it->second;
+    if ( !watch.DecRef() )
+    {
+        // remove in a platform specific way
+        ret = m_service->Remove(watch);
 
-    // remove in a platform specific way
-    return m_service->Remove(watch);
+        m_watches.erase(it);
+    }
+    return ret;
 }
 
 bool wxFileSystemWatcherBase::AddTree(const wxFileName& path, int events,
-                                      const wxString& filter)
+                                      const wxString& filespec)
 {
     if (!path.DirExists())
         return false;
@@ -150,38 +177,48 @@ bool wxFileSystemWatcherBase::AddTree(const wxFileName& path, int events,
     class AddTraverser : public wxDirTraverser
     {
     public:
-        AddTraverser(wxFileSystemWatcherBase* watcher, int events) :
-            m_watcher(watcher), m_events(events)
+        AddTraverser(wxFileSystemWatcherBase* watcher, int events,
+                     const wxString& filespec) :
+            m_watcher(watcher), m_events(events), m_filespec(filespec)
         {
         }
 
-        // CHECK we choose which files to delegate to Add(), maybe we should pass
-        // all of them to Add() and let it choose? this is useful when adding a
-        // file to a dir that is already watched, then not only should we know
-        // about that, but Add() should also behave well then
         virtual wxDirTraverseResult OnFile(const wxString& WXUNUSED(filename))
         {
+            // There is no need to watch individual files as we watch the
+            // parent directory which will notify us about any changes in them.
             return wxDIR_CONTINUE;
         }
 
         virtual wxDirTraverseResult OnDir(const wxString& dirname)
         {
-            wxLogTrace(wxTRACE_FSWATCHER, "--- AddTree adding '%s' ---",
-                                                                    dirname);
-            // we add as much as possible and ignore errors
-            m_watcher->Add(wxFileName(dirname), m_events);
+            if ( m_watcher->AddAny(wxFileName::DirName(dirname),
+                                   m_events, wxFSWPath_Tree, m_filespec) )
+            {
+                wxLogTrace(wxTRACE_FSWATCHER,
+                   "--- AddTree adding directory '%s' ---", dirname);
+            }
             return wxDIR_CONTINUE;
         }
 
     private:
         wxFileSystemWatcherBase* m_watcher;
         int m_events;
-        wxString m_filter;
+        wxString m_filespec;
     };
 
     wxDir dir(path.GetFullPath());
-    AddTraverser traverser(this, events);
-    dir.Traverse(traverser, filter);
+    // Prevent asserts or infinite loops in trees containing symlinks
+    int flags = wxDIR_DIRS;
+    if ( !path.ShouldFollowLink() )
+    {
+        flags |= wxDIR_NO_FOLLOW;
+    }
+    AddTraverser traverser(this, events, filespec);
+    dir.Traverse(traverser, filespec, flags);
+
+    // Add the path itself explicitly as Traverse() doesn't return it.
+    AddAny(path.GetPathWithSep(), events, wxFSWPath_Tree, filespec);
 
     return true;
 }
@@ -196,30 +233,63 @@ bool wxFileSystemWatcherBase::RemoveTree(const wxFileName& path)
     class RemoveTraverser : public wxDirTraverser
     {
     public:
-        RemoveTraverser(wxFileSystemWatcherBase* watcher) :
-            m_watcher(watcher)
+        RemoveTraverser(wxFileSystemWatcherBase* watcher,
+                        const wxString& filespec) :
+            m_watcher(watcher), m_filespec(filespec)
         {
         }
 
-        virtual wxDirTraverseResult OnFile(const wxString& filename)
+        virtual wxDirTraverseResult OnFile(const wxString& WXUNUSED(filename))
         {
-            m_watcher->Remove(wxFileName(filename));
+            // We never watch the individual files when watching the tree, so
+            // nothing to do here.
             return wxDIR_CONTINUE;
         }
 
         virtual wxDirTraverseResult OnDir(const wxString& dirname)
         {
-            m_watcher->RemoveTree(wxFileName(dirname));
+            m_watcher->Remove(wxFileName::DirName(dirname));
             return wxDIR_CONTINUE;
         }
 
     private:
         wxFileSystemWatcherBase* m_watcher;
+        wxString m_filespec;
     };
 
+    // If AddTree() used a filespec, we must use the same one
+    wxString canonical = GetCanonicalPath(path);
+    wxFSWatchInfoMap::iterator it = m_watches.find(canonical);
+    wxCHECK_MSG( it != m_watches.end(), false,
+                 wxString::Format("Path '%s' is not watched", canonical) );
+    wxFSWatchInfo watch = it->second;
+    const wxString filespec = watch.GetFilespec();
+
+#if defined(__WINDOWS__)
+    // When there's no filespec, the wxMSW AddTree() would have set a watch
+    // on only the passed 'path'. We must therefore remove only this
+    if (filespec.empty())
+    {
+        return Remove(path);
+    }
+    // Otherwise fall through to the generic implementation
+#endif // __WINDOWS__
+
     wxDir dir(path.GetFullPath());
-    RemoveTraverser traverser(this);
-    dir.Traverse(traverser);
+    // AddTree() might have used the wxDIR_NO_FOLLOW to prevent asserts or
+    // infinite loops in trees containing symlinks. We need to do the same
+    // or we'll try to remove unwatched items. Let's hope the caller used
+    // the same ShouldFollowLink() setting as in AddTree()...
+    int flags = wxDIR_DIRS;
+    if ( !path.ShouldFollowLink() )
+    {
+        flags |= wxDIR_NO_FOLLOW;
+    }
+    RemoveTraverser traverser(this, filespec);
+    dir.Traverse(traverser, filespec, flags);
+
+    // As in AddTree() above, handle the path itself explicitly.
+    Remove(path);
 
     return true;
 }

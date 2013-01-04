@@ -98,13 +98,10 @@ public:
     // rescaled to 16 x 16
     bool          HasNativeSize();
 
+#ifndef __WXOSX_IPHONE__
     // caller should increase ref count if needed longer
     // than the bitmap exists
     IconRef       GetIconRef();
-
-#ifndef __WXOSX_IPHONE__
-    // returns a Pict from the bitmap content
-    PicHandle     GetPictHandle();
 #endif
 
     CGContextRef  GetBitmapContext() const;
@@ -125,10 +122,10 @@ public:
     bool          m_ok;
     mutable CGImageRef    m_cgImageRef;
 
-    IconRef       m_iconRef;
 #ifndef __WXOSX_IPHONE__
-    PicHandle     m_pictHandle;
+    IconRef       m_iconRef;
 #endif
+
     CGContextRef  m_hBitmap;
 };
 
@@ -189,13 +186,6 @@ void wxMacCreateBitmapButton( ControlButtonContentInfo*info , const wxBitmap& bi
             info->contentType = kControlContentCGImageRef ;
             info->u.imageRef = (CGImageRef) bmap->CreateCGImage() ;
         }
-        else
-        {
-#ifndef __LP64__
-            info->contentType = kControlContentPictHandle ;
-            info->u.picture = bmap->GetPictHandle() ;
-#endif
-        }
     }
 }
 
@@ -247,7 +237,6 @@ void wxBitmapRefData::Init()
 
 #ifndef __WXOSX_IPHONE__
     m_iconRef = NULL ;
-    m_pictHandle = NULL ;
 #endif
     m_hBitmap = NULL ;
 
@@ -379,8 +368,8 @@ void *wxBitmapRefData::BeginRawAccess()
     wxCHECK_MSG( IsOk(), NULL, wxT("invalid bitmap") ) ;
     wxASSERT( m_rawAccessCount == 0 ) ;
 #ifndef __WXOSX_IPHONE__
-    wxASSERT_MSG( m_pictHandle == NULL && m_iconRef == NULL ,
-        wxT("Currently, modifing bitmaps that are used in controls already is not supported") ) ;
+    wxASSERT_MSG( m_iconRef == NULL ,
+                 wxT("Currently, modifing bitmaps that are used in controls already is not supported") ) ;
 #endif
     ++m_rawAccessCount ;
 
@@ -428,8 +417,39 @@ IconRef wxBitmapRefData::GetIconRef()
         OSType dataType = 0 ;
         OSType maskType = 0 ;
 
+        // since we don't have PICT conversion available, use
+        // the next larger standard icon size
+        // TODO: Use NSImage
+        if (sz <= 16)
+            sz = 16;
+        else if ( sz <= 32)
+            sz = 32;
+        else if ( sz <= 48)
+            sz = 48;
+        else if ( sz <= 128)
+            sz = 128;
+        else if ( sz <= 256)
+            sz = 256;
+        else if ( sz <= 512)
+            sz = 512;
+        else if ( sz <= 1024)
+            sz = 1024;
+        
         switch (sz)
         {
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7
+            case 1024:
+                dataType = kIconServices1024PixelDataARGB;
+                break;
+#endif
+            case 512:
+                dataType = kIconServices512PixelDataARGB;
+                break;
+                
+            case 256:
+                dataType = kIconServices256PixelDataARGB;
+                break;
+ 
             case 128:
                 dataType = kIconServices128PixelDataARGB ;
                 break;
@@ -581,11 +601,6 @@ IconRef wxBitmapRefData::GetIconRef()
                 DisposeHandle( maskdata ) ;
             }
         }
-        else
-        {
-            PicHandle pic = GetPictHandle() ;
-            SetIconFamilyData( iconFamily, 'PICT' , (Handle) pic ) ;
-        }
         // transform into IconRef
 
         // cleaner version existing from 10.3 upwards
@@ -600,10 +615,6 @@ IconRef wxBitmapRefData::GetIconRef()
     return m_iconRef ;
 }
 
-PicHandle wxBitmapRefData::GetPictHandle()
-{
-    return m_pictHandle ;
-}
 #endif
 
 CGImageRef wxBitmapRefData::CreateCGImage() const
@@ -743,13 +754,6 @@ void wxBitmapRefData::Free()
         ReleaseIconRef( m_iconRef ) ;
         m_iconRef = NULL ;
     }
-
-#ifndef __LP64__
-    if ( m_pictHandle )
-    {
-        m_pictHandle = NULL ;
-    }
-#endif
 #endif
     if ( m_hBitmap )
     {
@@ -1689,7 +1693,7 @@ IMPLEMENT_DYNAMIC_CLASS(wxPNGResourceHandler, wxBundleResourceHandler)
 
 class WXDLLEXPORT wxJPEGResourceHandler: public wxBundleResourceHandler
 {
-    DECLARE_DYNAMIC_CLASS(wxPNGResourceHandler)
+    DECLARE_DYNAMIC_CLASS(wxJPEGResourceHandler)
     
 public:
     inline wxJPEGResourceHandler()
@@ -1734,6 +1738,18 @@ bool wxBundleResourceHandler::LoadFile(wxBitmap *bitmap,
     }
         
     return false ;
+}
+
+/* static */
+wxBitmap wxBitmapHelpers::NewFromPNGData(const void* data, size_t size)
+{
+    wxCFRef<CGDataProviderRef>
+        provider(CGDataProviderCreateWithData(NULL, data, size, NULL) );
+    wxCFRef<CGImageRef>
+        image(CGImageCreateWithPNGDataProvider(provider, NULL, true,
+                                                kCGRenderingIntentDefault));
+
+    return wxBitmap(image);
 }
 
 void wxBitmap::InitStandardHandlers()

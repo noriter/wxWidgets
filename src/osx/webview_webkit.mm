@@ -103,7 +103,6 @@ static pascal OSStatus wxWebKitKeyEventHandler(EventHandlerCallRef handler,
 
     UInt32 keyCode ;
     UInt32 modifiers ;
-    Point point ;
     UInt32 when = EventTimeToTicks( GetEventTime( event ) ) ;
 
 #if wxUSE_UNICODE
@@ -140,8 +139,6 @@ static pascal OSStatus wxWebKitKeyEventHandler(EventHandlerCallRef handler,
                       sizeof(UInt32), NULL, &keyCode );
     GetEventParameter(event, kEventParamKeyModifiers, typeUInt32, NULL,
                       sizeof(UInt32), NULL, &modifiers );
-    GetEventParameter(event, kEventParamMouseLocation, typeQDPoint, NULL,
-                      sizeof(Point), NULL, &point );
 
     UInt32 message = (keyCode << 8) + charCode;
     switch ( GetEventKind( event ) )
@@ -155,7 +152,7 @@ static pascal OSStatus wxWebKitKeyEventHandler(EventHandlerCallRef handler,
 
             wxTheApp->MacSetCurrentEvent( event , handler ) ;
             if ( /* focus && */ wxTheApp->MacSendKeyDownEvent(
-                focus, message, modifiers, when, point.h, point.v, uniChar[0]))
+                focus, message, modifiers, when, uniChar[0]))
             {
                 result = noErr ;
             }
@@ -165,7 +162,7 @@ static pascal OSStatus wxWebKitKeyEventHandler(EventHandlerCallRef handler,
 
         case kEventRawKeyUp :
             if ( /* focus && */ wxTheApp->MacSendKeyUpEvent(
-                focus , message , modifiers , when , point.h , point.v , uniChar[0] ) )
+                focus , message , modifiers , when , uniChar[0] ) )
             {
                 result = noErr ;
             }
@@ -179,8 +176,6 @@ static pascal OSStatus wxWebKitKeyEventHandler(EventHandlerCallRef handler,
                 event.m_controlDown = modifiers & controlKey;
                 event.m_altDown = modifiers & optionKey;
                 event.m_metaDown = modifiers & cmdKey;
-                event.m_x = point.h;
-                event.m_y = point.v;
 
 #if wxUSE_UNICODE
                 event.m_uniChar = uniChar[0] ;
@@ -315,6 +310,15 @@ DEFINE_ONE_SHOT_HANDLER_GETTER( wxWebViewWebKitEventHandler )
 
 @end
 
+@interface WebViewUIDelegate : NSObject
+{
+    wxWebViewWebKit* webKitWindow;
+}
+
+- initWithWxWindow: (wxWebViewWebKit*)inWindow;
+
+@end
+
 //We use a hash to map scheme names to wxWebViewHandler
 WX_DECLARE_STRING_HASH_MAP(wxSharedPtr<wxWebViewHandler>, wxStringToWebHandlerMap);
 
@@ -386,6 +390,11 @@ bool wxWebViewWebKit::Create(wxWindow *parent,
 
     [m_webView setPolicyDelegate:policyDelegate];
 
+    WebViewUIDelegate* uiDelegate =
+            [[WebViewUIDelegate alloc] initWithWxWindow: this];
+
+    [m_webView setUIDelegate:uiDelegate];
+
     //Register our own class for custom scheme handling
     [NSURLProtocol registerClass:[WebViewCustomProtocol class]];
 
@@ -397,14 +406,19 @@ wxWebViewWebKit::~wxWebViewWebKit()
 {
     WebViewLoadDelegate* loadDelegate = [m_webView frameLoadDelegate];
     WebViewPolicyDelegate* policyDelegate = [m_webView policyDelegate];
+    WebViewUIDelegate* uiDelegate = [m_webView UIDelegate];
     [m_webView setFrameLoadDelegate: nil];
     [m_webView setPolicyDelegate: nil];
+    [m_webView setUIDelegate: nil];
 
     if (loadDelegate)
         [loadDelegate release];
 
     if (policyDelegate)
         [policyDelegate release];
+
+    if (uiDelegate)
+        [uiDelegate release];
 }
 
 // ----------------------------------------------------------------------------
@@ -823,7 +837,7 @@ void wxWebViewWebKit::SetZoom(wxWebViewZoom zoom)
 
 }
 
-void wxWebViewWebKit::SetPage(const wxString& src, const wxString& baseUrl)
+void wxWebViewWebKit::DoSetPage(const wxString& src, const wxString& baseUrl)
 {
    if ( !m_webView )
         return;
@@ -1313,6 +1327,34 @@ wxString nsErrorToWxHtmlError(NSError* error, wxWebViewNavigationError* out)
 
 }
 
+@end
+
+
+@implementation WebViewUIDelegate
+
+- initWithWxWindow: (wxWebViewWebKit*)inWindow
+{
+    [super init];
+    webKitWindow = inWindow;    // non retained
+    return self;
+}
+
+- (void)webView:(WebView *)sender printFrameView:(WebFrameView *)frameView
+{
+    wxUnusedVar(sender);
+    wxUnusedVar(frameView);
+
+    webKitWindow->Print();
+}
+
+- (NSArray *)webView:(WebView *)sender contextMenuItemsForElement:(NSDictionary *)element
+                                                 defaultMenuItems:(NSArray *) defaultMenuItems
+{
+    if(webKitWindow->IsContextMenuEnabled())
+        return defaultMenuItems;
+    else
+        return nil;
+}
 @end
 
 #endif //wxUSE_WEBVIEW && wxUSE_WEBVIEW_WEBKIT

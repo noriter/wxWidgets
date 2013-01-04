@@ -155,11 +155,10 @@ protected:
     virtual void DoApplyWidgetStyle(GtkRcStyle *style);
     virtual GdkWindow *GTKGetWindow(wxArrayGdkWindows& windows) const;
 
+    virtual wxSize DoGetSizeFromTextSize(int xlen, int ylen = -1) const;
+
     virtual void DoFreeze();
     virtual void DoThaw();
-
-    // common part of all ctors
-    void Init();
 
     // Widgets that use the style->base colour for the BG colour should
     // override this and return true.
@@ -179,6 +178,8 @@ protected:
     void GTKSetJustification();
 
 private:
+    void Init();
+
     // overridden wxTextEntry virtual methods
     virtual GtkEditable *GetEditable() const;
     virtual GtkEntry *GetEntry() const;

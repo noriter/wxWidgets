@@ -243,7 +243,9 @@ enum wxTextAttrBulletStyle
 
     wxTEXT_ATTR_BULLET_STYLE_ALIGN_LEFT      = 0x00000000,
     wxTEXT_ATTR_BULLET_STYLE_ALIGN_RIGHT     = 0x00001000,
-    wxTEXT_ATTR_BULLET_STYLE_ALIGN_CENTRE    = 0x00002000
+    wxTEXT_ATTR_BULLET_STYLE_ALIGN_CENTRE    = 0x00002000,
+
+    wxTEXT_ATTR_BULLET_STYLE_CONTINUATION    = 0x00004000
 };
 
 /*!
@@ -734,6 +736,9 @@ public:
        wxTextEntry::SetValue(value);
     }
 
+    // wxTextEntry overrides
+    virtual bool SetHint(const wxString& hint);
+
     // wxWindow overrides
     virtual wxVisualAttributes GetDefaultAttributes() const
     {
@@ -816,7 +821,7 @@ public:
           m_start(event.m_start),
           m_end(event.m_end) { }
 
-    // get the mouse event which happend over the URL
+    // get the mouse event which happened over the URL
     const wxMouseEvent& GetMouseEvent() const { return m_evtMouse; }
 
     // get the start of the URL

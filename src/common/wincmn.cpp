@@ -620,20 +620,13 @@ void wxWindowBase::DoCentre(int dir)
 // fits the window around the children
 void wxWindowBase::Fit()
 {
-    if ( !GetChildren().empty() )
-    {
-        SetSize(GetBestSize());
-    }
-    //else: do nothing if we have no children
+    SetSize(GetBestSize());
 }
 
 // fits virtual size (ie. scrolled area etc.) around children
 void wxWindowBase::FitInside()
 {
-    if ( GetChildren().GetCount() > 0 )
-    {
-        SetVirtualSize( GetBestVirtualSize() );
-    }
+    SetVirtualSize( GetBestVirtualSize() );
 }
 
 // On Mac, scrollbars are explicitly children.
@@ -906,14 +899,19 @@ wxSize wxWindowBase::GetBestSize() const
     // it to be used
     wxSize size = DoGetBestClientSize();
     if ( size != wxDefaultSize )
-    {
         size += DoGetBorderSize();
+    else
+        size = DoGetBestSize();
 
-        CacheBestSize(size);
-        return size;
-    }
+    // Ensure that the best size is at least as large as min size.
+    size.IncTo(GetMinSize());
 
-    return DoGetBestSize();
+    // And not larger than max size.
+    size.DecToIfSpecified(GetMaxSize());
+
+    // Finally cache result and return.
+    CacheBestSize(size);
+    return size;
 }
 
 int wxWindowBase::GetBestHeight(int width) const
@@ -938,12 +936,16 @@ void wxWindowBase::SetMinSize(const wxSize& minSize)
 {
     m_minWidth = minSize.x;
     m_minHeight = minSize.y;
+
+    InvalidateBestSize();
 }
 
 void wxWindowBase::SetMaxSize(const wxSize& maxSize)
 {
     m_maxWidth = maxSize.x;
     m_maxHeight = maxSize.y;
+
+    InvalidateBestSize();
 }
 
 void wxWindowBase::SetInitialSize(const wxSize& size)
@@ -1313,6 +1315,20 @@ void wxWindowBase::RemoveChild(wxWindowBase *child)
 
     GetChildren().DeleteObject((wxWindow *)child);
     child->SetParent(NULL);
+}
+
+void wxWindowBase::SetParent(wxWindowBase *parent)
+{
+    // This assert catches typos which may result in using "this" instead of
+    // "parent" when creating the window. This doesn't happen often but when it
+    // does the results are unpleasant because the program typically just
+    // crashes when due to a stack overflow or something similar and this
+    // assert doesn't cost much (OTOH doing a more general check that the
+    // parent is not one of our children would be more expensive and probably
+    // not worth it).
+    wxASSERT_MSG( parent != this, wxS("Can't use window as its own parent") );
+
+    m_parent = (wxWindow *)parent;
 }
 
 bool wxWindowBase::Reparent(wxWindowBase *newParent)
@@ -2247,7 +2263,7 @@ void wxWindowBase::UnsetConstraints(wxLayoutConstraints *c)
 {
     if ( c )
     {
-        if ( c->left.GetOtherWindow() && (c->top.GetOtherWindow() != this) )
+        if ( c->left.GetOtherWindow() && (c->left.GetOtherWindow() != this) )
             c->left.GetOtherWindow()->RemoveConstraintReference(this);
         if ( c->top.GetOtherWindow() && (c->top.GetOtherWindow() != this) )
             c->top.GetOtherWindow()->RemoveConstraintReference(this);

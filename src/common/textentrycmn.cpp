@@ -224,12 +224,14 @@ void wxTextEntryBase::AppendText(const wxString& text)
 
 void wxTextEntryBase::DoSetValue(const wxString& value, int flags)
 {
-    if ( value != GetValue() )
+    if ( value != DoGetValue() )
     {
         EventsSuppressor noeventsIf(this, !(flags & SetValue_SendEvent));
 
         SelectAll();
         WriteText(value);
+
+        SetInsertionPoint(0);
     }
     else // Same value, no need to do anything.
     {
@@ -238,8 +240,6 @@ void wxTextEntryBase::DoSetValue(const wxString& value, int flags)
         if ( flags & SetValue_SendEvent )
             SendTextUpdatedEvent(GetEditableWindow());
     }
-
-    SetInsertionPoint(0);
 }
 
 void wxTextEntryBase::Replace(long from, long to, const wxString& value)

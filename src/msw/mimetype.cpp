@@ -227,17 +227,36 @@ wxString wxFileTypeImpl::GetCommand(const wxString& verb) const
     wxLogNull nolog;
     wxString strKey;
 
+    // Since Windows Vista the association used by Explorer is different from
+    // the association information stored in the traditional part of the
+    // registry. Unfortunately the new schema doesn't seem to be documented
+    // anywhere so using it involves a bit of guesswork:
+    //
+    // The information is stored under Explorer-specific key whose path is
+    // below. The interesting part is UserChoice subkey which is the only one
+    // we use so far but there is also OpenWithProgids subkey which can exist
+    // even if UserChoice doesn't. However in practice there doesn't seem to be
+    // any cases when OpenWithProgids values for the given extension are
+    // different from those found directly under HKCR\.ext, so for now we don't
+    // bother to use this, apparently the programs registering their file type
+    // associations do it in both places. We do use UserChoice because when the
+    // association is manually changed by the user it's only recorded there and
+    // so must override whatever value was created under HKCR by the setup
+    // program.
+
     {
-        wxRegKey explorerKey(wxRegKey::HKCU, wxT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\") + m_ext);
-        if (explorerKey.Exists())
+        wxRegKey explorerKey
+                 (
+                    wxRegKey::HKCU,
+                    wxT("Software\\Microsoft\\Windows\\CurrentVersion\\")
+                    wxT("Explorer\\FileExts\\") +
+                    m_ext +
+                    wxT("\\UserChoice")
+                 );
+        if ( explorerKey.Open(wxRegKey::Read) &&
+                explorerKey.QueryValue(wxT("Progid"), strKey) )
         {
-            if (explorerKey.Open(wxRegKey::Read))
-            {
-                if (explorerKey.QueryValue(wxT("Progid"), strKey))
-                {
-                    strKey = wxFileTypeImplGetCurVer(strKey);
-                }
-            }
+            strKey = wxFileTypeImplGetCurVer(strKey);
         }
     }
 
@@ -636,22 +655,23 @@ wxFileType *wxMimeTypesManagerImpl::Associate(const wxFileTypeInfo& ftInfo)
            extWithDot = wxT('.');
         extWithDot += ext;
 
-        wxRegKey key(wxRegKey::HKCR, extWithDot);
-        if ( !key.Exists() ) key.Create();
-        key.SetValue(wxEmptyString, filetype);
+        wxRegKey key2(wxRegKey::HKCR, extWithDot);
+        if ( !key2.Exists() )
+            key2.Create();
+        key2.SetValue(wxEmptyString, filetype);
 
         // now set any mimetypes we may have, but ignore it if none
-        const wxString& mimetype = ftInfo.GetMimeType();
-        if ( !mimetype.empty() )
+        const wxString& mimetype2 = ftInfo.GetMimeType();
+        if ( !mimetype2.empty() )
         {
             // set the MIME type
-            ok = key.SetValue(wxT("Content Type"), mimetype);
+            ok = key2.SetValue(wxT("Content Type"), mimetype2);
 
             if ( ok )
             {
                 // create the MIME key
                 wxString strKey = MIME_DATABASE_KEY;
-                strKey << mimetype;
+                strKey << mimetype2;
                 wxRegKey keyMIME(wxRegKey::HKCR, strKey);
                 ok = keyMIME.Create();
 

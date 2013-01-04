@@ -316,6 +316,11 @@ public:
         @a checked is @true (default value) or SetBitmaps(wxNullBitmap, bmp)
         otherwise.
 
+        SetBitmap() must be called before the item is appended to the menu,
+        i.e. appending the item without a bitmap and setting one later is not
+        guaranteed to work. But the bitmap can be changed or reset later if it
+        had been set up initially.
+
         Notice that GTK+ uses a global setting called @c gtk-menu-images to
         determine if the images should be shown in the menus at all. If it is
         off (which is the case in e.g. Gnome 2.28 by default), no images will
@@ -399,7 +404,13 @@ public:
         m_pMyMenuItem3->SetItemLabel("Simple item");
         m_pMyMenuItem4->SetItemLabel("Item with &accelerator");
         @endcode
-        
+
+        @note In wxGTK using @c "SHIFT" with non-alphabetic characters
+        currently doesn't work, even in combination with other modifiers, due
+        to GTK+ limitation. E.g. @c Shift+Ctrl+A works but @c Shift+Ctrl+1 or
+        @c Shift+/ do not, so avoid using accelerators of this form in portable
+        code.
+
         @see GetItemLabel(), GetItemLabelText()
     */
     virtual void SetItemLabel(const wxString& label);

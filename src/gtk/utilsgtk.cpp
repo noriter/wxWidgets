@@ -97,11 +97,6 @@ void wxDisplaySizeMM( int *width, int *height )
     if (height) *height = gdk_screen_height_mm();
 }
 
-void wxGetMousePosition( int* x, int* y )
-{
-    gdk_window_get_pointer(gtk_widget_get_root_window(wxGetRootWindow()), x, y, NULL);
-}
-
 bool wxColourDisplay()
 {
     return true;
@@ -290,18 +285,6 @@ wxEventLoopBase *wxGUIAppTraits::CreateEventLoop()
 }
 
 
-#if wxUSE_INTL && defined(__UNIX__)
-void wxGUIAppTraits::SetLocale()
-{
-#ifdef __WXGTK3__
-    setlocale(LC_ALL, "");
-#else
-    gtk_set_locale();
-#endif
-    wxUpdateLocaleIsUtf8();
-}
-#endif
-
 #ifdef __UNIX__
 
 #if wxDEBUG_LEVEL && wxUSE_STACKWALKER
@@ -319,10 +302,12 @@ protected:
 
         // append this stack frame's info in the dialog
         if (!frame.GetFileName().empty() || !fncname.empty())
+        {
             gtk_assert_dialog_append_stack_frame(m_dlg,
-                                                fncname.mb_str(),
-                                                frame.GetFileName().mb_str(),
+                                                fncname.utf8_str(),
+                                                frame.GetFileName().utf8_str(),
                                                 frame.GetLine());
+        }
     }
 
 private:
@@ -333,7 +318,7 @@ static void get_stackframe_callback(void* p)
 {
     StackDump* dump = static_cast<StackDump*>(p);
     // skip over frames up to including wxOnAssert()
-    dump->ProcessFrames(3);
+    dump->ProcessFrames(6);
 }
 
 #endif // wxDEBUG_LEVEL && wxUSE_STACKWALKER
@@ -416,8 +401,6 @@ wxString wxGUIAppTraits::GetDesktopEnvironment() const
 
 #endif // __UNIX__ || __OS2__
 
-#ifdef __WXGTK26__
-
 // see the hack below in wxCmdLineParser::GetUsageString().
 // TODO: replace this hack with a g_option_group_get_entries()
 //       call as soon as such function exists;
@@ -463,8 +446,6 @@ wxString wxGetNameFromGtkOptionEntry(const GOptionEntry *opt)
     return wxT("  ") + ret;
 }
 
-#endif // __WXGTK26__
-
 #ifdef __UNIX__
 
 wxString
@@ -473,48 +454,36 @@ wxGUIAppTraits::GetStandardCmdLineOptions(wxArrayString& names,
 {
     wxString usage;
 
-#ifdef __WXGTK26__
-#ifndef __WXGTK3__
-    if (!gtk_check_version(2,6,0))
-#endif
+    // check whether GLib version is greater than 2.6 but also lower than 2.33
+    // because, as we use the undocumented _GOptionGroup struct, we don't want
+    // to run this code with future versions which might change it (2.32 is the
+    // latest one at the time of this writing)
+    if (glib_check_version(2,33,0))
     {
-        // since GTK>=2.6, we can use the glib_check_version() symbol...
+        usage << _("The following standard GTK+ options are also supported:\n");
 
-        // check whether GLib version is greater than 2.6 but also lower than 2.33
-        // because, as we use the undocumented _GOptionGroup struct, we don't want
-        // to run this code with future versions which might change it (2.32 is the
-        // latest one at the time of this writing)
-        if (glib_check_version(2,6,0) == NULL && glib_check_version(2,33,0))
+        // passing true here means that the function can open the default
+        // display while parsing (not really used here anyhow)
+        GOptionGroup *gtkOpts = gtk_get_option_group(true);
+
+        // WARNING: here we access the internals of GOptionGroup:
+        GOptionEntry *entries = ((_GOptionGroup*)gtkOpts)->entries;
+        unsigned int n_entries = ((_GOptionGroup*)gtkOpts)->n_entries;
+        wxArrayString namesOptions, descOptions;
+
+        for ( size_t n = 0; n < n_entries; n++ )
         {
-            usage << _("The following standard GTK+ options are also supported:\n");
+            if ( entries[n].flags & G_OPTION_FLAG_HIDDEN )
+                continue;       // skip
 
-            // passing true here means that the function can open the default
-            // display while parsing (not really used here anyhow)
-            GOptionGroup *gtkOpts = gtk_get_option_group(true);
+            names.push_back(wxGetNameFromGtkOptionEntry(&entries[n]));
 
-            // WARNING: here we access the internals of GOptionGroup:
-            GOptionEntry *entries = ((_GOptionGroup*)gtkOpts)->entries;
-            unsigned int n_entries = ((_GOptionGroup*)gtkOpts)->n_entries;
-            wxArrayString namesOptions, descOptions;
-
-            for ( size_t n = 0; n < n_entries; n++ )
-            {
-                if ( entries[n].flags & G_OPTION_FLAG_HIDDEN )
-                    continue;       // skip
-
-                names.push_back(wxGetNameFromGtkOptionEntry(&entries[n]));
-
-                const gchar * const entryDesc = entries[n].description;
-                desc.push_back(wxString(entryDesc));
-            }
-
-            g_option_group_free (gtkOpts);
+            const gchar * const entryDesc = entries[n].description;
+            desc.push_back(wxString(entryDesc));
         }
+
+        g_option_group_free (gtkOpts);
     }
-#else
-    wxUnusedVar(names);
-    wxUnusedVar(desc);
-#endif // __WXGTK26__
 
     return usage;
 }

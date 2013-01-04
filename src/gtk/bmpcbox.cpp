@@ -102,9 +102,9 @@ bool wxBitmapComboBox::Create(wxWindow *parent,
     // Select 'value' in entry-less mode
     if ( !GetEntry() )
     {
-        int n = FindString(value);
-        if ( n != wxNOT_FOUND )
-            SetSelection(n);
+        int i = FindString(value);
+        if (i != wxNOT_FOUND)
+            SetSelection(i);
     }
 
     return true;
@@ -124,6 +124,7 @@ void wxBitmapComboBox::GTKCreateComboBoxWidget()
     {
 #ifdef __WXGTK3__
         m_widget = gtk_combo_box_new_with_model_and_entry(GTK_TREE_MODEL(store));
+        gtk_combo_box_set_entry_text_column(GTK_COMBO_BOX(m_widget), m_stringCellIndex);
 #else
         m_widget = gtk_combo_box_entry_new_with_model( GTK_TREE_MODEL(store), m_stringCellIndex );
 #endif

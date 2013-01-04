@@ -166,7 +166,7 @@ enum wxAuiManagerOption
         custom draw your wxAuiManager window (not recommended).
     @endEventTable
 
-    @library{wxbase}
+    @library{wxaui}
     @category{aui}
 
     @see @ref overview_aui, wxAuiNotebook, wxAuiDockArt, wxAuiPaneInfo
@@ -407,7 +407,7 @@ protected:
     In addition, these parameters specify the pane's docked position, floating
     position, preferred size, minimum size, caption text among many other parameters.
 
-    @library{wxbase}
+    @library{wxaui}
     @category{aui}
 
     @see wxAuiManager, wxAuiDockArt

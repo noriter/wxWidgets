@@ -184,7 +184,7 @@ public:
 
     @library{wxrichtext}
     @category{richtext}
-    @appearance{richtextctrl.png}
+    @appearance{richtextctrl}
 
  */
 
@@ -2102,6 +2102,17 @@ public:
 #endif
 
 // Implementation
+
+    /**
+        Processes the back key.
+    */
+    virtual bool ProcessBackKey(wxKeyEvent& event, int flags);
+
+    /**
+        Given a character position at which there is a list style, find the range
+        encompassing the same list style by looking backwards and forwards.
+    */
+    virtual wxRichTextRange FindRangeForList(long pos, bool& isNumberedList);
 
     /**
         Sets up the caret for the given position and container, after a mouse click.

@@ -17,7 +17,7 @@
 // For compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
 
-#if wxUSE_FILEPICKERCTRL && defined(__WXGTK26__)
+#if wxUSE_FILEPICKERCTRL
 
 #include "wx/filepicker.h"
 #include "wx/tooltip.h"
@@ -44,11 +44,7 @@ bool wxFileButton::Create( wxWindow *parent, wxWindowID id,
 {
     // we can't use the native button for wxFLP_SAVE pickers as it can only
     // open existing files and there is no way to create a new file using it
-    if (!(style & wxFLP_SAVE) && !(style & wxFLP_USE_TEXTCTRL)
-#ifndef __WXGTK3__
-        && gtk_check_version(2,6,0) == NULL
-#endif
-        )
+    if (!(style & wxFLP_SAVE) && !(style & wxFLP_USE_TEXTCTRL))
     {
         // VERY IMPORTANT: this code is identical to relative code in wxDirButton;
         //                 if you find a problem here, fix it also in wxDirButton !
@@ -135,17 +131,22 @@ void wxFileButton::SetPath(const wxString &str)
 void wxFileButton::SetInitialDirectory(const wxString& dir)
 {
     if (m_dialog)
-        DoSetInitialDirectory(static_cast<wxFileDialog*>(m_dialog), dir);
+    {
+        // Only change the directory if the default file name doesn't have any
+        // directory in it, otherwise it takes precedence.
+        if ( m_path.find_first_of(wxFileName::GetPathSeparators()) ==
+                wxString::npos )
+        {
+            static_cast<wxFileDialog*>(m_dialog)->SetDirectory(dir);
+        }
+    }
     else
         wxGenericFileButton::SetInitialDirectory(dir);
 }
 
-#endif      // wxUSE_FILEPICKERCTRL && defined(__WXGTK26__)
+#endif // wxUSE_FILEPICKERCTRL
 
-
-
-
-#if wxUSE_DIRPICKERCTRL && defined(__WXGTK26__)
+#if wxUSE_DIRPICKERCTRL
 
 #ifdef __UNIX__
 #include <unistd.h> // chdir
@@ -201,11 +202,7 @@ bool wxDirButton::Create( wxWindow *parent, wxWindowID id,
                         long style, const wxValidator& validator,
                         const wxString &name )
 {
-    if (!(style & wxDIRP_USE_TEXTCTRL)
-#ifndef __WXGTK3__
-        && gtk_check_version(2,6,0) == NULL
-#endif
-        )
+    if (!(style & wxDIRP_USE_TEXTCTRL))
     {
         // VERY IMPORTANT: this code is identic to relative code in wxFileButton;
         //                 if you find a problem here, fix it also in wxFileButton !
@@ -299,4 +296,4 @@ void wxDirButton::SetInitialDirectory(const wxString& dir)
         wxGenericDirButton::SetInitialDirectory(dir);
 }
 
-#endif      // wxUSE_DIRPICKERCTRL && defined(__WXGTK26__)
+#endif // wxUSE_DIRPICKERCTRL

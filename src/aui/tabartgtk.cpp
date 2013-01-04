@@ -79,6 +79,23 @@ void wxAuiGtkTabArt::DrawBackground(wxDC& dc, wxWindow* WXUNUSED(wnd), const wxR
                                        rect.x, rect.y, rect.width, rect.height);
 }
 
+void wxAuiGtkTabArt::DrawBorder(wxDC& WXUNUSED(dc), wxWindow* wnd, const wxRect& rect)
+{
+    int generic_border_width = wxAuiGenericTabArt::GetBorderWidth(wnd);
+
+    if (!wnd) return;
+    if (!wnd->m_wxwindow) return;
+    if (!gtk_widget_is_drawable(wnd->m_wxwindow)) return;
+
+    GtkStyle *style_notebook = gtk_widget_get_style(wxGTKPrivate::GetNotebookWidget());
+
+    gtk_paint_box(style_notebook, wnd->GTKGetDrawingWindow(), GTK_STATE_NORMAL, GTK_SHADOW_OUT,
+                  NULL, wnd->m_wxwindow,
+                  const_cast<char*>("notebook"),
+                  rect.x + generic_border_width + 1, rect.y + generic_border_width + 1,
+                  rect.width - (generic_border_width + 1), rect.height - (generic_border_width + 1));
+}
+
 void ButtonStateAndShadow(int button_state, GtkStateType &state, GtkShadowType &shadow)
 {
 
@@ -194,11 +211,8 @@ void wxAuiGtkTabArt::DrawTab(wxDC& dc, wxWindow* wnd, const wxAuiNotebookPage& p
 
     if (page.active)
         tab_rect.height += 2 * GTK_NOTEBOOK (wxGTKPrivate::GetNotebookWidget())->tab_hborder;
-    // if no bitmap is set, we need a tiny correction
-    if (! page.bitmap.IsOk())
-        tab_rect.height += 1;
 
-    int gap_rect_height = 6 * GTK_NOTEBOOK (wxGTKPrivate::GetNotebookWidget())->tab_hborder;
+    int gap_rect_height = 10 * GTK_NOTEBOOK (wxGTKPrivate::GetNotebookWidget())->tab_hborder;
     int gap_rect_x = 1, gap_start = 0, gap_width = 0;
     int gap_rect_y = tab_rect.y - gap_rect_height;
     int gap_rect_width = window_rect.width;
@@ -238,6 +252,15 @@ void wxAuiGtkTabArt::DrawTab(wxDC& dc, wxWindow* wnd, const wxAuiNotebookPage& p
     wxGTKDCImpl *impldc = (wxGTKDCImpl*) dc.GetImpl();
     GdkWindow* window = impldc->GetGDKWindow();
 
+    // Before drawing the active tab itself, draw a box without border, because some themes
+    // have transparent gaps and a line would be visible at the bottom of the tab
+    if (page.active)
+        gtk_paint_box(style_notebook, window, GTK_STATE_NORMAL, GTK_SHADOW_NONE,
+                      NULL, widget,
+                      const_cast<char*>("notebook"),
+                      gap_rect_x, gap_rect_y,
+                      gap_rect_width, gap_rect_height);
+
     if (tab_pos == wxAUI_NB_BOTTOM)
     {
         if (page.active)
@@ -276,6 +299,15 @@ void wxAuiGtkTabArt::DrawTab(wxDC& dc, wxWindow* wnd, const wxAuiNotebookPage& p
                            tab_rect.width, tab_rect.height,
                            GTK_POS_BOTTOM);
     }
+
+    // After drawing the inactive tab itself, draw a box with the same dimensions as the gap-box,
+    // otherwise we don't get a gap-box, if the active tab is invisible
+    if (!page.active)
+        gtk_paint_box(style_notebook, window, GTK_STATE_NORMAL, GTK_SHADOW_OUT,
+                      NULL, widget,
+                      const_cast<char*>("notebook"),
+                      gap_rect_x, gap_rect_y,
+                      gap_rect_width, gap_rect_height);
 
     wxCoord textX = tab_rect.x + padding + style_notebook->xthickness;
 
@@ -351,7 +383,8 @@ void wxAuiGtkTabArt::DrawTab(wxDC& dc, wxWindow* wnd, const wxAuiNotebookPage& p
         *out_button_rect = DrawCloseButton(dc, widget, close_button_state, rect, wxRIGHT, &area);
     }
 
-    tab_rect.width = std::min(tab_rect.width, clip_width);
+    if ( clip_width < tab_rect.width )
+        tab_rect.width = clip_width;
     *out_tab_rect = tab_rect;
 
     dc.DestroyClippingRegion();
@@ -447,6 +480,17 @@ int wxAuiGtkTabArt::GetBestTabCtrlSize(wxWindow* wnd,
     SetSelectedFont(m_normalFont);
     int tab_height = 3 * gtk_widget_get_style(wxGTKPrivate::GetNotebookWidget())->ythickness + wxAuiGenericTabArt::GetBestTabCtrlSize(wnd, pages, required_bmp_size);
     return tab_height;
+}
+
+int wxAuiGtkTabArt::GetBorderWidth(wxWindow* wnd)
+{
+    return wxAuiGenericTabArt::GetBorderWidth(wnd) + wxMax(GTK_NOTEBOOK (wxGTKPrivate::GetNotebookWidget())->tab_hborder,
+                                                           GTK_NOTEBOOK (wxGTKPrivate::GetNotebookWidget())->tab_vborder);
+}
+
+int wxAuiGtkTabArt::GetAdditionalBorderSpace(wxWindow* wnd)
+{
+    return 2 * GetBorderWidth(wnd);
 }
 
 wxSize wxAuiGtkTabArt::GetTabSize(wxDC& dc,

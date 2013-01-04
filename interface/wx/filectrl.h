@@ -57,7 +57,7 @@ enum
 
     @library{wxcore}
     @category{ctrl}
-    @appearance{filectrl.png}
+    @appearance{filectrl}
 
     @nativeimpl{wxgtk}
 
@@ -118,7 +118,7 @@ public:
                 const wxString& name = wxFileCtrlNameStr);
 
     /**
-        Returns the current directory of the file control (i.e. the directory shown by it).
+        Returns the current directory of the file control (i.e.\ the directory shown by it).
     */
     virtual wxString GetDirectory() const;
 
@@ -230,7 +230,7 @@ wxEventType wxEVT_FILECTRL_FILTERCHANGED;
         The current file filter of the file control has been changed
     @endEventTable
 
-    @library{wxbase}
+    @library{wxcore}
     @category{events}
 */
 class wxFileCtrlEvent : public wxCommandEvent

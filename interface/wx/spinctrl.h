@@ -47,7 +47,7 @@
 
     @library{wxcore}
     @category{ctrl}
-    @appearance{spinctrl.png}
+    @appearance{spinctrl}
 
     @see wxSpinButton, wxSpinCtrlDouble, wxControl
 */
@@ -115,6 +115,15 @@ public:
                 int initial = 0, const wxString& name = "wxSpinCtrl");
 
     /**
+        Returns the numerical base being currently used, 10 by default.
+
+        @see SetBase()
+
+        @since 2.9.5
+     */
+    int GetBase() const;
+
+    /**
         Gets maximal allowable value.
     */
     int GetMax() const;
@@ -130,7 +139,33 @@ public:
     int GetValue() const;
 
     /**
+        Sets the base to use for the numbers in this control.
+
+        Currently the only supported values are 10 (which is the default) and
+        16.
+
+        Changing the base allows the user to enter the numbers in the specified
+        base, e.g. with "0x" prefix for hexadecimal numbers, and also displays
+        the numbers in the specified base when they are changed using the spin
+        control arrows.
+
+        @param base
+            Numeric base, currently only 10 and 16 are supported.
+        @return
+            @true if the base was successfully changed or @false if it failed,
+            usually meaning that either the base is not 10 or 16.
+
+        @since 2.9.5
+     */
+    bool SetBase(int base);
+
+    /**
         Sets range of allowable values.
+
+        Notice that calling this method may change the value of the control if
+        it's not inside the new valid range, e.g. it will become @a minVal if
+        it is less than it now. However no @c wxEVT_COMMAND_SPINCTRL_UPDATED
+        event is generated, even if it the value does change.
     */
     void SetRange(int minVal, int maxVal);
 
@@ -178,7 +213,7 @@ public:
 
     @library{wxcore}
     @category{ctrl}
-    @appearance{spinctrldouble.png}
+    @appearance{spinctrldouble}
 
     @see wxSpinButton, wxSpinCtrl, wxControl
 */
@@ -273,6 +308,8 @@ public:
 
     /**
         Sets the increment value.
+        @note You may also need to increase the number of visible digits
+        using SetDigits
     */
     void SetIncrement(double inc);
 

@@ -358,9 +358,9 @@ struct wxComboCtrlFeatures
            You should avoid adding or deleting items in this event.
     @endEventTable
 
-    @library{wxbase}
+    @library{wxcore}
     @category{ctrl}
-    @appearance{comboctrl.png}
+    @appearance{comboctrl}
 
     @see wxComboBox, wxChoice, wxOwnerDrawnComboBox, wxComboPopup,
          wxCommandEvent

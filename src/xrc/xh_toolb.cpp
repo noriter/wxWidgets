@@ -26,6 +26,8 @@
     #include "wx/toolbar.h"
 #endif
 
+#include "wx/xml/xml.h"
+
 IMPLEMENT_DYNAMIC_CLASS(wxToolBarXmlHandler, wxXmlResourceHandler)
 
 wxToolBarXmlHandler::wxToolBarXmlHandler()
@@ -239,14 +241,14 @@ wxObject *wxToolBarXmlHandler::DoCreateResource()
         m_isInside = false;
         m_toolbar = NULL;
 
-        toolbar->Realize();
-
         if (m_parentAsWindow && !GetBool(wxT("dontattachtoframe")))
         {
             wxFrame *parentFrame = wxDynamicCast(m_parent, wxFrame);
             if (parentFrame)
                 parentFrame->SetToolBar(toolbar);
         }
+
+        toolbar->Realize();
 
         return toolbar;
     }

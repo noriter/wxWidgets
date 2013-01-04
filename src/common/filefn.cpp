@@ -61,6 +61,7 @@
 
 #ifdef __WINDOWS__
     #include "wx/msw/private.h"
+    #include "wx/msw/missing.h"
     #include "wx/msw/mslu.h"
 
     // sys/cygwin.h is needed for cygwin_conv_to_full_win32_path()
@@ -1355,9 +1356,7 @@ wxString wxFindNextFile()
     wxCHECK_MSG( gs_dir, "", "You must call wxFindFirstFile before!" );
 
     wxString result;
-    gs_dir->GetNext(&result);
-
-    if ( result.empty() )
+    if ( !gs_dir->GetNext(&result) || result.empty() )
     {
         wxDELETE(gs_dir);
         return result;
@@ -1574,8 +1573,12 @@ wxString wxGetOSDirectory()
 #ifdef __WXWINCE__
     return wxString(wxT("\\Windows"));
 #elif defined(__WINDOWS__) && !defined(__WXMICROWIN__)
-    wxChar buf[256];
-    GetWindowsDirectory(buf, 256);
+    wxChar buf[MAX_PATH];
+    if ( !GetWindowsDirectory(buf, MAX_PATH) )
+    {
+        wxLogLastError(wxS("GetWindowsDirectory"));
+    }
+
     return wxString(buf);
 #elif defined(__WXMAC__) && wxOSX_USE_CARBON
     return wxMacFindFolderNoSeparator(kOnSystemDisk, 'macs', false);

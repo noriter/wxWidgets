@@ -118,6 +118,27 @@ public:
     void Init(wxDC* dc, wxBitmap& buffer = wxNullBitmap,
               int style = wxBUFFER_CLIENT_AREA);
     //@}
+
+
+    /**
+       Blits the buffer to the dc, and detaches the dc from the buffer (so it
+       can be effectively used once only).
+    
+       Usually only called in the destructor or by the destructor of derived
+       classes if the BufferedDC must blit before the derived class (which may
+       own the dc it's blitting to) is destroyed.
+    */
+    void UnMask();
+
+    /**
+       Set the style.
+    */
+    void SetStyle(int style);
+
+    /**
+       Get the style.
+    */
+    int GetStyle() const;
 };
 
 
@@ -139,7 +160,7 @@ public:
     have native double-buffering, otherwise, it is a typedef of
     wxBufferedPaintDC.
 
-    @library{wxbase}
+    @library{wxcore}
     @category{dc}
 
     @see wxDC, wxBufferedPaintDC, wxPaintDC
@@ -153,6 +174,13 @@ public:
     wxAutoBufferedPaintDC(wxWindow* window);
 };
 
+
+/**
+ * Check if the window is natively double buffered and will return a wxPaintDC
+ * if it is, a wxBufferedPaintDC otherwise.  It is the caller's responsibility
+ * to delete the wxDC pointer when finished with it.
+ */
+wxDC* wxAutoBufferedPaintDCFactory(wxWindow* window);
 
 
 /**

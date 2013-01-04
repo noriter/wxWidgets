@@ -9,24 +9,16 @@
 
 /**
 
-@page page_cppconst Preprocessor symbols defined by wxWidgets
+@page page_cppconst Preprocessor Symbols
 
-These are preprocessor symbols used in the wxWidgets source, grouped
-by category (and sorted by alphabetical order inside each category).
-All of these macros except for the @c wxUSE_XXX variety is defined if the
-corresponding condition is @true and undefined if it isn't, so they should be
-always tested using @ifdef_ and not @if_.
+@tableofcontents
 
-@li @ref page_cppconst_guisystem
-@li @ref page_cppconst_os
-@li @ref page_cppconst_cpu
-@li @ref page_cppconst_hardware
-@li @ref page_cppconst_compiler
-@li @ref page_cppconst_featuretests
-@li @ref page_cppconst_msvc_setup_h
-@li @ref page_cppconst_miscellaneous
+These are preprocessor symbols used in the wxWidgets source, grouped by
+category (and sorted by alphabetical order inside each category). All of these
+macros except for the @c wxUSE_XXX variety is defined if the corresponding
+condition is @true and undefined if it isn't, so they should be always tested
+using @ifdef_ and not @if_.
 
-<hr>
 
 
 @section page_cppconst_guisystem GUI system
@@ -42,14 +34,14 @@ always tested using @ifdef_ and not @if_.
 @itemdef{__WXGTK24__, GTK+ 2.4 or higher}
 @itemdef{__WXGTK26__, GTK+ 2.6 or higher}
 @itemdef{__WXGTK210__, GTK+ 2.10 or higher}
-@itemdef{__WXMAC__, old define for Mac OS X}
+@itemdef{__WXMAC__, old define, same as @c __WXOSX__}
 @itemdef{__WXMOTIF__, Motif}
 @itemdef{__WXMOTIF20__, Motif 2.0 or higher}
 @itemdef{__WXMSW__, GUI using <a href="http://en.wikipedia.org/wiki/Windows_User">Windows Controls</a>}
-@itemdef{__WXOSX__, any OS X}
-@itemdef{__WXOSX_IPHONE__, OS X iPhone}
+@itemdef{__WXOSX__, OS X GUI using any Apple widget framework (Carbon, AppKit or UIKit)}
+@itemdef{__WXOSX_IPHONE__, OS X iPhone (UIKit)}
 @itemdef{__WXOSX_CARBON__, Mac OS X using Carbon}
-@itemdef{__WXOSX_COCOA__, Mac OS X using Cocoa}
+@itemdef{__WXOSX_COCOA__, Mac OS X using Cocoa (AppKit)}
 @itemdef{__WXOSX_MAC__, Mac OS X (Carbon or Cocoa)}
 @itemdef{__WXOSX_OR_COCOA__, Any Mac OS X port (wxOSX-Carbon, wxOSX-Cocoa or 
                         wxCocoa)}
@@ -81,14 +73,15 @@ The convention is to use the @c __WX prefix for these
 symbols, although this has not always been followed.
 
 
-@section page_cppconst_os Operating systems
+
+@section page_cppconst_os Operating Systems
 
 @beginDefList
 @itemdef{__APPLE__, any Mac OS version}
 @itemdef{__AIX__, AIX}
 @itemdef{__BSD__, Any *BSD system}
 @itemdef{__CYGWIN__, Cygwin: Unix on Win32}
-@itemdef{__DARWIN__, Mac OS X (with BSD C library)}
+@itemdef{__DARWIN__, Mac OS X (with BSD C library), using any port (see also @c __WXOSX__)}
 @itemdef{__DATA_GENERAL__, DG-UX}
 @itemdef{__FREEBSD__, FreeBSD}
 @itemdef{__HPUX__, HP-UX (Unix)}
@@ -117,7 +110,7 @@ symbols, although this has not always been followed.
 
 
 
-@section page_cppconst_cpu Hardware architectures (CPU)
+@section page_cppconst_cpu Hardware Architectures (CPU)
 
 Note that not all of these symbols are always defined, it depends on the
 compiler used.
@@ -131,7 +124,7 @@ compiler used.
 
 
 
-@section page_cppconst_hardware Hardware type
+@section page_cppconst_hardware Hardware Type
 
 @beginDefList
 @itemdef{__SMARTPHONE__, Generic mobile devices with phone buttons and a small display}
@@ -173,7 +166,7 @@ compiler used.
 
 
 
-@section page_cppconst_featuretests Feature tests
+@section page_cppconst_featuretests Feature Tests
 
 Some library features may not be always available even if they were selected
 by the user. To make it possible to check if this is the case, the library
@@ -224,7 +217,7 @@ Currently the following symbols exist:
 
 
 
-@section page_cppconst_msvc_setup_h Libraries selection for MSVC setup.h
+@section page_cppconst_msvc_setup_h Library Selection for MSVC
 
 Microsoft Visual C++ users may use the special @c wx/setup.h file for this
 compiler in @c include/msvc subdirectory. This file implicitly links in all the
@@ -234,6 +227,7 @@ configurations. However sometimes linking with all the libraries is not
 desirable, for example because some of them were not built and this is where
 the symbols in this section can be helpful: defining them allows to not link
 with the corresponding library. The following symbols are honoured:
+
     - wxNO_ADV_LIB
     - wxNO_AUI_LIB
     - wxNO_HTML_LIB

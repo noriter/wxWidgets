@@ -48,7 +48,7 @@
 
 #if wxPG_COMPATIBILITY_1_4
 
-// Used to establish backwards compatiblity
+// Used to establish backwards compatibility
 const char* g_invalidStringContent = "@__TOTALLY_INVALID_STRING__@";
 
 #endif
@@ -1035,7 +1035,7 @@ bool wxPGProperty::IntToValue( wxVariant& variant, int number, int WXUNUSED(argF
 }
 
 // Convert semicolon delimited tokens into child values.
-bool wxPGProperty::StringToValue( wxVariant& variant, const wxString& text, int argFlags ) const
+bool wxPGProperty::StringToValue( wxVariant& v, const wxString& text, int argFlags ) const
 {
     if ( !GetChildCount() )
         return false;
@@ -1240,7 +1240,7 @@ bool wxPGProperty::StringToValue( wxVariant& variant, const wxString& text, int 
     }
 
     if ( changed )
-        variant = list;
+        v = list;
 
     return changed;
 }

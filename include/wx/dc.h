@@ -283,6 +283,8 @@ public:
         return NULL;
     }
 
+    virtual void* GetHandle() const { return NULL; }
+    
     // query dimension, colour deps, resolution
 
     virtual void DoGetSize(int *width, int *height) const = 0;
@@ -431,8 +433,12 @@ public:
 
     // clipping
 
+    // Note that this pure virtual method has an implementation that updates
+    // the values returned by DoGetClippingBox() and so can be called from the
+    // derived class overridden version if it makes sense (i.e. if the clipping
+    // box coordinates are not already updated in some other way).
     virtual void DoSetClippingRegion(wxCoord x, wxCoord y,
-                                     wxCoord width, wxCoord height) = 0;
+                                     wxCoord w, wxCoord h) = 0;
 
     // NB: this function works with device coordinates, not the logical ones!
     virtual void DoSetDeviceClippingRegion(const wxRegion& region) = 0;
@@ -786,6 +792,9 @@ public:
 
     wxWindow *GetWindow() const
         { return m_pimpl->GetWindow(); }
+
+    void *GetHandle() const
+        { return m_pimpl->GetHandle(); }
 
     bool IsOk() const
         { return m_pimpl && m_pimpl->IsOk(); }

@@ -156,8 +156,9 @@ const wxEventType wxEVT_NULL = wxNewEventType();
 
 wxDEFINE_EVENT( wxEVT_IDLE, wxIdleEvent );
 
-// Thread event
+// Thread and asynchronous call events
 wxDEFINE_EVENT( wxEVT_THREAD, wxThreadEvent );
+wxDEFINE_EVENT( wxEVT_ASYNC_METHOD_CALL, wxAsyncMethodCallEvent );
 
 #endif // wxUSE_BASE
 
@@ -736,6 +737,10 @@ wxKeyEvent::wxKeyEvent(wxEventType type)
     m_uniChar = WXK_NONE;
 #endif
 
+    m_x =
+    m_y = wxDefaultCoord;
+    m_hasPosition = false;
+
     InitPropagation();
 }
 
@@ -757,6 +762,42 @@ wxKeyEvent::wxKeyEvent(wxEventType eventType, const wxKeyEvent& evt)
     m_eventType = eventType;
 
     InitPropagation();
+}
+
+void wxKeyEvent::InitPositionIfNecessary() const
+{
+    if ( m_hasPosition )
+        return;
+
+    // We're const because we're called from const Get[XY]() methods but we
+    // need to update the "cached" values.
+    wxKeyEvent& self = const_cast<wxKeyEvent&>(*this);
+    self.m_hasPosition = true;
+
+    // The only position we can possibly associate with the keyboard event on
+    // the platforms where it doesn't carry it already is the mouse position.
+    wxGetMousePosition(&self.m_x, &self.m_y);
+
+    // If this event is associated with a window, the position should be in its
+    // client coordinates, but otherwise leave it in screen coordinates as what
+    // else can we use?
+    wxWindow* const win = wxDynamicCast(GetEventObject(), wxWindow);
+    if ( win )
+        win->ScreenToClient(&self.m_x, &self.m_y);
+}
+
+wxCoord wxKeyEvent::GetX() const
+{
+    InitPositionIfNecessary();
+
+    return m_x;
+}
+
+wxCoord wxKeyEvent::GetY() const
+{
+    InitPositionIfNecessary();
+
+    return m_y;
 }
 
 bool wxKeyEvent::IsKeyInCategory(int category) const
@@ -1524,6 +1565,17 @@ bool wxEvtHandler::TryHereOnly(wxEvent& event)
     if ( GetEventHashTable().HandleEvent(event, this) )
         return true;
 
+#ifdef wxHAS_CALL_AFTER
+    // There is an implicit entry for async method calls processing in every
+    // event handler:
+    if ( event.GetEventType() == wxEVT_ASYNC_METHOD_CALL &&
+            event.GetEventObject() == this )
+    {
+        static_cast<wxAsyncMethodCallEvent&>(event).Execute();
+        return true;
+    }
+#endif // wxHAS_CALL_AFTER
+
     // We don't have a handler for this event.
     return false;
 }
@@ -1623,15 +1675,6 @@ wxEvtHandler::DoUnbind(int id,
     if (!m_dynamicEvents)
         return false;
 
-    // Remove connection from tracker node (wxEventConnectionRef)
-    wxEvtHandler *eventSink = func.GetEvtHandler();
-    if ( eventSink && eventSink != this )
-    {
-        wxEventConnectionRef *evtConnRef = FindRefInTrackerList(eventSink);
-        if ( evtConnRef )
-            evtConnRef->DecRef();
-    }
-
     wxList::compatibility_iterator node = m_dynamicEvents->GetFirst();
     while (node)
     {
@@ -1643,6 +1686,15 @@ wxEvtHandler::DoUnbind(int id,
             entry->m_fn->IsMatching(func) &&
             ((entry->m_callbackUserData == userData) || !userData))
         {
+            // Remove connection from tracker node (wxEventConnectionRef)
+            wxEvtHandler *eventSink = entry->m_fn->GetEvtHandler();
+            if ( eventSink && eventSink != this )
+            {
+                wxEventConnectionRef *evtConnRef = FindRefInTrackerList(eventSink);
+                if ( evtConnRef )
+                    evtConnRef->DecRef();
+            }
+
             delete entry->m_callbackUserData;
             m_dynamicEvents->Erase( node );
             delete entry;

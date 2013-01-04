@@ -3513,7 +3513,10 @@ bool wxTreeCtrl::MSWOnNotify(int idCtrl, WXLPARAM lParam, WXLPARAM *result)
                             {
                                 wxLoadedDLL dllComCtl32(wxT("comctl32.dll"));
                                 if ( dllComCtl32.IsLoaded() )
+                                {
                                     wxDL_INIT_FUNC(s_pfn, ImageList_Copy, dllComCtl32);
+                                    loaded = true;
+                                }
                             }
 
                             if ( !s_pfnImageList_Copy )
@@ -3918,6 +3921,34 @@ void wxTreeCtrl::DoSetItemState(const wxTreeItemId& item, int state)
     tvItem.state = INDEXTOSTATEIMAGEMASK(state + 1);
 
     DoSetItem(&tvItem);
+}
+
+// ----------------------------------------------------------------------------
+// Update locking.
+// ----------------------------------------------------------------------------
+
+// Using WM_SETREDRAW with the native control is a bad idea as it's broken in
+// some Windows versions (see http://support.microsoft.com/kb/130611) and
+// doesn't seem to do anything in other ones (e.g. under Windows 7 the tree
+// control keeps updating its scrollbars while the items are added to it,
+// resulting in horrible flicker when adding even a couple of dozen items).
+// So we hide it instead of freezing -- this still flickers, but actually not
+// as badly as it would if we didn't do it.
+
+void wxTreeCtrl::DoFreeze()
+{
+    // Notice that we don't call wxWindow::Hide() here as we want the window to
+    // remain shown from wxWidgets point of view and also because
+    // wxWindowMSW::Show() calls Do{Freeze,Thaw}() itself, so we'd get into
+    // infinite recursion this way.
+    if ( IsShown() )
+        ::ShowWindow(GetHwnd(), SW_HIDE);
+}
+
+void wxTreeCtrl::DoThaw()
+{
+    if ( IsShown() )
+        ::ShowWindow(GetHwnd(), SW_SHOW);
 }
 
 #endif // wxUSE_TREECTRL

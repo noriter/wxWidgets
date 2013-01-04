@@ -244,6 +244,7 @@ void wxRibbonAUIArtProvider::SetColourScheme(
     m_button_bar_hover_background_brush = LikeSecondary(1.7);
     m_button_bar_active_background_brush = LikeSecondary(1.4);
     m_button_bar_label_colour = m_tab_label_colour;
+    m_button_bar_label_disabled_colour = m_tab_label_colour;
     m_gallery_border_pen = m_tab_border_pen;
     m_gallery_item_border_pen = m_button_bar_hover_border_pen;
     m_gallery_hover_background_brush = LikePrimary(1.2);
@@ -326,7 +327,7 @@ void wxRibbonAUIArtProvider::DrawTab(wxDC& dc,
 
     dc.SetFont(m_tab_label_font);
     dc.SetPen(*wxTRANSPARENT_PEN);
-    if(tab.active || tab.hovered)
+    if(tab.active || tab.hovered || tab.highlight)
     {
         if(tab.active)
         {
@@ -343,8 +344,24 @@ void wxRibbonAUIArtProvider::DrawTab(wxDC& dc,
         dc.SetBrush(m_tab_active_top_background_brush);
         dc.DrawRectangle(tab.rect.x, tab.rect.y + 3, tab.rect.width - 1,
             grad_rect.y - tab.rect.y - 3);
-        dc.GradientFillLinear(grad_rect, m_tab_active_background_colour,
-            m_tab_active_background_gradient_colour, wxSOUTH);
+        if(tab.highlight)
+        {
+            wxColour top_colour((m_tab_active_background_colour.Red()   + m_tab_hover_background_top_colour.Red())/2,
+                                (m_tab_active_background_colour.Green() + m_tab_hover_background_top_colour.Green())/2,
+                                (m_tab_active_background_colour.Blue()  + m_tab_hover_background_top_colour.Blue())/2);
+
+            wxColour bottom_colour((m_tab_active_background_gradient_colour.Red()   + m_tab_hover_background_top_gradient_colour.Red())/2,
+                                   (m_tab_active_background_gradient_colour.Green() + m_tab_hover_background_top_gradient_colour.Green())/2,
+                                   (m_tab_active_background_gradient_colour.Blue()  + m_tab_hover_background_top_gradient_colour.Blue())/2);
+
+            dc.GradientFillLinear(grad_rect, top_colour,
+                bottom_colour, wxSOUTH);
+        }
+        else
+        {
+            dc.GradientFillLinear(grad_rect, m_tab_active_background_colour,
+                m_tab_active_background_gradient_colour, wxSOUTH);
+        }
     }
     else
     {
@@ -1066,7 +1083,9 @@ void wxRibbonAUIArtProvider::DrawButtonBarButton(
     }
 
     dc.SetFont(m_button_bar_label_font);
-    dc.SetTextForeground(m_button_bar_label_colour);
+    dc.SetTextForeground(state & wxRIBBON_BUTTONBAR_BUTTON_DISABLED
+                            ? m_button_bar_label_disabled_colour
+                            : m_button_bar_label_colour);
     DrawButtonBarButtonForeground(dc, rect, kind, state, label, bitmap_large,
         bitmap_small);
 }

@@ -2661,10 +2661,21 @@ bool HandleSubItemPrepaint(LPNMLVCUSTOMDRAW pLVCD, HFONT hfont, int colCount)
     SelectInHDC selFont(hdc, hfont);
 
     // get the rectangle to paint
-    int subitem = colCount ? col + 1 : col;
     RECT rc;
-    wxGetListCtrlSubItemRect(hwndList, item, subitem, LVIR_BOUNDS, rc);
-    rc.left += 6;
+    wxGetListCtrlSubItemRect(hwndList, item, col, LVIR_BOUNDS, rc);
+    if ( !col && colCount > 1 )
+    {
+        // ListView_GetSubItemRect() returns the entire item rect for 0th
+        // subitem while we really need just the part for this column
+        RECT rc2;
+        wxGetListCtrlSubItemRect(hwndList, item, 1, LVIR_BOUNDS, rc2);
+        rc.right = rc2.left;
+        rc.left += 4;
+    }
+    else // not first subitem
+    {
+        rc.left += 6;
+    }
 
     // get the image and text to draw
     wxChar text[512];
@@ -3076,15 +3087,6 @@ int wxListCtrl::OnGetItemColumnImage(long item, long column) const
         return OnGetItemImage(item);
 
     return -1;
-}
-
-wxListItemAttr *wxListCtrl::OnGetItemAttr(long WXUNUSED_UNLESS_DEBUG(item)) const
-{
-    wxASSERT_MSG( item >= 0 && item < GetItemCount(),
-                  wxT("invalid item index in OnGetItemAttr()") );
-
-    // no attributes by default
-    return NULL;
 }
 
 wxListItemAttr *wxListCtrl::DoGetItemColumnAttr(long item, long column) const

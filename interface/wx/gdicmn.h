@@ -447,21 +447,35 @@ public:
 
     /**
        Set the left side of the rectangle.
+
+       Notice that because the rectangle stores its left side and width,
+       calling SetLeft() changes the right side position too -- but does
+       preserve the width.
     */
     void SetLeft(int left);
 
     /**
        Set the right side of the rectangle.
+
+       Notice that this doesn't affect GetLeft() return value but changes the
+       rectangle width to set its right side to the given position.
      */
     void SetRight(int right);
 
     /**
        Set the top edge of the rectangle.
+
+       Notice that because the rectangle stores its top side and height,
+       calling SetTop() changes the bottom side position too -- but does
+       preserve the height.
      */
     void SetTop(int top);
 
     /**
-       Set the bottome edge of th rectangle.
+       Set the bottom edge of the rectangle.
+
+       Notice that this doesn't affect GetTop() return value but changes the
+       rectangle height to set its bottom side to the given position.
      */
     void SetBottom(int bottom);
 
@@ -874,6 +888,18 @@ public:
     void DecTo(const wxSize& size);
 
     /**
+        Decrements this object to be not bigger than the given size ignoring
+        non-specified components.
+
+        This is similar to DecTo() but doesn't do anything for x or y
+        component if the same component of @a size is not specified, i.e. set
+        to ::wxDefaultCoord.
+
+        @since 2.9.5
+     */
+    void DecToIfSpecified(const wxSize& size);
+
+    /**
         Gets the height member.
     */
     int GetHeight() const;
@@ -928,9 +954,8 @@ public:
     void Set(int width, int height);
 
     /**
-        Combine this size object with another one replacing the default (i.e.
-        equal to -1) components of this object with those of the other. It is
-        typically used like this:
+        Combine this size object with another one replacing the default (i.e.\ equal to -1)
+        components of this object with those of the other. It is typically used like this:
 
         @code
         if ( !size.IsFullySpecified() )
@@ -1008,6 +1033,73 @@ const wxSize wxDefaultSize;
     @header{wx/gdicmn.h}
 */
 #define wxBITMAP(bitmapName)
+
+/**
+    Creates a bitmap from either application resources or embedded image data
+    in PNG format.
+
+    This macro is similar to wxBITMAP() but works with bitmap data in PNG
+    format and not BMP or XPM.
+
+    Under Windows the given @a bitmapName must be present in the application
+    resource file with the type @c RCDATA and refer to a PNG image. I.e. you
+    should have a definition similar to the following in your @c .rc file:
+    @code
+        mybitmap    RCDATA  "mybitmap.png"
+    @endcode
+    to be able to use @c wxBITMAP_PNG(mybitmap) in the code.
+
+    Under OS X the file with the specified name and "png" extension must be
+    present in the "Resources" subdirectory of the application bundle.
+
+    Under the other platforms, this is equivalent to wxBITMAP_PNG_FROM_DATA()
+    and so loads the image data from the array called @c bitmapName_png that
+    must exist. Notice that it @e must be an array and not a pointer as the
+    macro needs to be able to determine its size. Such an array can be produced
+    by a number of conversion programs. A very simple one is included in
+    wxWidgets distribution as @c misc/scripts/png2c.py.
+
+    Finally notice that you must register PNG image handler to be able to
+    load bitmaps from PNG data. This can be done either by calling
+    wxInitAllImageHandlers() which also registers all the other image formats
+    or including the necessary header:
+    @code
+        #include <wx/imagpng.h>
+    @endcode
+    and calling
+    @code
+        wxImage::AddHandler(new wxPNGHandler);
+    @endcode
+    in your application startup code.
+
+    @see wxBITMAP_PNG_FROM_DATA()
+
+    @header{wx/gdicmn.h}
+
+    @since 2.9.5
+ */
+#define wxBITMAP_PNG(bitmapName)
+
+/**
+    Creates a bitmap from embedded image data in PNG format.
+
+    This macro is a thin wrapper around wxBitmap::NewFromPNGData() and takes
+    just the base name of the array containing the image data and computes its
+    size internally. In other words, the array called @c bitmapName_png must
+    exist. Notice that it @e must be an array and not a pointer as the macro
+    needs to be able to determine its size. Such an array can be produced by a
+    number of conversion programs. A very simple one is included in wxWidgets
+    distribution as @c misc/scripts/png2c.py.
+
+    You can use wxBITMAP_PNG() to load the PNG bitmaps from resources on the
+    platforms that support this and only fall back to loading them from data
+    under the other ones (i.e. not Windows and not OS X).
+
+    @header{wx/gdicmn.h}
+
+    @since 2.9.5
+ */
+#define wxBITMAP_PNG_FROM_DATA(bitmapName)
 
 /**
     This macro loads an icon from either application resources (on the

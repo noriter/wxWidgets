@@ -1,5 +1,5 @@
 %define pref /usr
-%define ver  2.9.4
+%define ver  2.9.5
 %define ver2 2.9
 %define rel  1
 
@@ -250,6 +250,7 @@ wx/meta/implicitconversion.h
 wx/meta/int2type.h
 wx/meta/movable.h
 wx/meta/pod.h
+wx/meta/removeref.h
 wx/fswatcher.h
 wx/generic/fswatcher.h
 wx/unix/app.h
