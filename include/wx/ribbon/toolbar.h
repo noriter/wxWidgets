@@ -18,7 +18,21 @@
 #include "wx/ribbon/control.h"
 #include "wx/ribbon/art.h"
 
-class wxRibbonToolBarToolBase;
+class WXDLLIMPEXP_RIBBON wxRibbonToolBarToolBase : public wxTrackable
+{
+public:
+	wxString help_string;
+	wxBitmap bitmap;
+	wxBitmap bitmap_disabled;
+	wxRect dropdown;
+	wxPoint position;
+	wxSize size;
+	wxClientDataContainer client_data;
+	int id;
+	wxRibbonButtonKind kind;
+	long state;
+};
+
 class wxRibbonToolBarToolGroup;
 WX_DEFINE_USER_EXPORTED_ARRAY_PTR(wxRibbonToolBarToolGroup*, wxArrayRibbonToolBarToolGroup, class WXDLLIMPEXP_RIBBON);
 
@@ -86,7 +100,7 @@ public:
                 const wxBitmap& bitmap_disabled = wxNullBitmap,
                 const wxString& help_string = wxEmptyString,
                 wxRibbonButtonKind kind = wxRIBBON_BUTTON_NORMAL,
-                wxObject* client_data = NULL);
+                wxClientData* client_data = NULL);
 
     virtual wxRibbonToolBarToolBase* AddSeparator();
 
@@ -122,7 +136,7 @@ public:
                 const wxBitmap& bitmap_disabled = wxNullBitmap,
                 const wxString& help_string = wxEmptyString,
                 wxRibbonButtonKind kind = wxRIBBON_BUTTON_NORMAL,
-                wxObject* client_data = NULL);
+                wxClientData* client_data = NULL);
 
     virtual wxRibbonToolBarToolBase* InsertSeparator(size_t pos);
 
@@ -135,7 +149,7 @@ public:
     virtual size_t GetToolCount() const;
     virtual int GetToolId(const wxRibbonToolBarToolBase* tool)const;
 
-    virtual wxObject* GetToolClientData(int tool_id)const;
+    virtual wxClientData* GetToolClientData(int tool_id)const;
     virtual bool GetToolEnabled(int tool_id)const;
     virtual wxString GetToolHelpString(int tool_id)const;
     virtual wxRibbonButtonKind GetToolKind(int tool_id)const;
@@ -145,7 +159,7 @@ public:
     virtual bool Realize();
     virtual void SetRows(int nMin, int nMax = -1);
 
-    virtual void SetToolClientData(int tool_id, wxObject* clientData);
+    virtual void SetToolClientData(int tool_id, wxClientData* clientData);
     virtual void SetToolDisabledBitmap(int tool_id, const wxBitmap &bitmap);
     virtual void SetToolHelpString(int tool_id, const wxString& helpString);
     virtual void SetToolNormalBitmap(int tool_id, const wxBitmap &bitmap);

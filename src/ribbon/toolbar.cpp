@@ -29,21 +29,6 @@
 #include "wx/msw/private.h"
 #endif
 
-class wxRibbonToolBarToolBase
-{
-public:
-    wxString help_string;
-    wxBitmap bitmap;
-    wxBitmap bitmap_disabled;
-    wxRect dropdown;
-    wxPoint position;
-    wxSize size;
-    wxObject* client_data;
-    int id;
-    wxRibbonButtonKind kind;
-    long state;
-};
-
 WX_DEFINE_ARRAY_PTR(wxRibbonToolBarToolBase*, wxArrayRibbonToolBarToolBase);
 
 class wxRibbonToolBarToolGroup
@@ -176,7 +161,7 @@ wxRibbonToolBarToolBase* wxRibbonToolBar::AddTool(
             const wxBitmap& bitmap_disabled,
             const wxString& help_string,
             wxRibbonButtonKind kind,
-            wxObject* client_data)
+            wxClientData* client_data)
 {
     return InsertTool(GetToolCount(), tool_id, bitmap, bitmap_disabled,
         help_string, kind, client_data);
@@ -240,7 +225,7 @@ wxRibbonToolBarToolBase* wxRibbonToolBar::InsertTool(
             const wxBitmap& bitmap_disabled,
             const wxString& help_string,
             wxRibbonButtonKind kind,
-            wxObject* client_data)
+            wxClientData* client_data)
 {
     wxASSERT(bitmap.IsOk());
 
@@ -257,7 +242,7 @@ wxRibbonToolBarToolBase* wxRibbonToolBar::InsertTool(
         tool->bitmap_disabled = MakeDisabledBitmap(bitmap);
     tool->help_string = help_string;
     tool->kind = kind;
-    tool->client_data = client_data;
+    tool->client_data.SetClientObject(client_data);
     tool->position = wxPoint(0, 0);
     tool->size = wxSize(0, 0);
     tool->state = 0;
@@ -455,11 +440,11 @@ int wxRibbonToolBar::GetToolId(const wxRibbonToolBarToolBase* tool)const
     return tool->id;
 }
 
-wxObject* wxRibbonToolBar::GetToolClientData(int tool_id)const
+wxClientData* wxRibbonToolBar::GetToolClientData(int tool_id)const
 {
     wxRibbonToolBarToolBase* tool = FindById(tool_id);
     wxCHECK_MSG(tool != NULL , NULL, "Invalid tool id");
-    return tool->client_data;
+    return tool->client_data.GetClientObject();
 }
 
 bool wxRibbonToolBar::GetToolEnabled(int tool_id)const
@@ -532,11 +517,11 @@ bool wxRibbonToolBar::IsSizingContinuous() const
     return false;
 }
 
-void wxRibbonToolBar::SetToolClientData(int tool_id, wxObject* clientData)
+void wxRibbonToolBar::SetToolClientData(int tool_id, wxClientData* clientData)
 {
     wxRibbonToolBarToolBase* tool = FindById(tool_id);
     wxCHECK_RET(tool != NULL , "Invalid tool id");
-    tool->client_data = clientData;
+    tool->client_data.SetClientData(clientData);
 }
 
 void wxRibbonToolBar::SetToolDisabledBitmap(int tool_id, const wxBitmap &bitmap)

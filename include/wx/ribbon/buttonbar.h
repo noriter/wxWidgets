@@ -23,6 +23,83 @@ class wxRibbonButtonBarButtonBase;
 class wxRibbonButtonBarLayout;
 class wxRibbonButtonBarButtonInstance;
 
+class WXDLLIMPEXP_RIBBON wxRibbonButtonBarButtonSizeInfo
+{
+public:
+	bool is_supported;
+	wxSize size;
+	wxRect normal_region;
+	wxRect dropdown_region;
+};
+
+class WXDLLIMPEXP_RIBBON wxRibbonButtonBarButtonInstance
+{
+public:
+	wxPoint position;
+	wxRibbonButtonBarButtonBase* base;
+	wxRibbonButtonBarButtonState size;
+};
+
+class WXDLLIMPEXP_RIBBON wxRibbonButtonBarButtonBase : public wxTrackable
+{
+public:
+	wxRibbonButtonBarButtonInstance NewInstance()
+	{
+		wxRibbonButtonBarButtonInstance i;
+		i.base = this;
+		return i;
+	}
+
+	wxRibbonButtonBarButtonState GetLargestSize()
+	{
+		if(sizes[wxRIBBON_BUTTONBAR_BUTTON_LARGE].is_supported)
+			return wxRIBBON_BUTTONBAR_BUTTON_LARGE;
+		if(sizes[wxRIBBON_BUTTONBAR_BUTTON_MEDIUM].is_supported)
+			return wxRIBBON_BUTTONBAR_BUTTON_MEDIUM;
+		wxASSERT(sizes[wxRIBBON_BUTTONBAR_BUTTON_SMALL].is_supported);
+		return wxRIBBON_BUTTONBAR_BUTTON_SMALL;
+	}
+
+	bool GetSmallerSize(
+		wxRibbonButtonBarButtonState* size, int n = 1)
+	{
+		for(; n > 0; --n)
+		{
+			switch(*size)
+			{
+			case wxRIBBON_BUTTONBAR_BUTTON_LARGE:
+				if(sizes[wxRIBBON_BUTTONBAR_BUTTON_MEDIUM].is_supported)
+				{
+					*size = wxRIBBON_BUTTONBAR_BUTTON_MEDIUM;
+					break;
+				}
+			case wxRIBBON_BUTTONBAR_BUTTON_MEDIUM:
+				if(sizes[wxRIBBON_BUTTONBAR_BUTTON_SMALL].is_supported)
+				{
+					*size = wxRIBBON_BUTTONBAR_BUTTON_SMALL;
+					break;
+				}
+			case wxRIBBON_BUTTONBAR_BUTTON_SMALL:
+			default:
+				return false;
+			}
+		}
+		return true;
+	}
+
+	wxString label;
+	wxString help_string;
+	wxBitmap bitmap_large;
+	wxBitmap bitmap_large_disabled;
+	wxBitmap bitmap_small;
+	wxBitmap bitmap_small_disabled;
+	wxRibbonButtonBarButtonSizeInfo sizes[3];
+	wxClientDataContainer client_data;
+	int id;
+	wxRibbonButtonKind kind;
+	long state;
+};
+
 WX_DEFINE_USER_EXPORTED_ARRAY_PTR(wxRibbonButtonBarLayout*, wxArrayRibbonButtonBarLayout, class WXDLLIMPEXP_RIBBON);
 WX_DEFINE_USER_EXPORTED_ARRAY_PTR(wxRibbonButtonBarButtonBase*, wxArrayRibbonButtonBarButtonBase, class WXDLLIMPEXP_RIBBON);
 
@@ -82,7 +159,7 @@ public:
                 const wxBitmap& bitmap_small_disabled = wxNullBitmap,
                 wxRibbonButtonKind kind = wxRIBBON_BUTTON_NORMAL,
                 const wxString& help_string = wxEmptyString,
-                wxObject* client_data = NULL);
+                wxClientData* client_data = NULL);
 
     virtual wxRibbonButtonBarButtonBase* InsertButton(
                 size_t pos,
@@ -123,7 +200,7 @@ public:
                 const wxBitmap& bitmap_small_disabled = wxNullBitmap,
                 wxRibbonButtonKind kind = wxRIBBON_BUTTON_NORMAL,
                 const wxString& help_string = wxEmptyString,
-                wxObject* client_data = NULL);
+                wxClientData* client_data = NULL);
 
     virtual size_t GetButtonCount() const;
 

@@ -45,83 +45,6 @@ BEGIN_EVENT_TABLE(wxRibbonButtonBar, wxRibbonControl)
     EVT_LEFT_UP(wxRibbonButtonBar::OnMouseUp)
 END_EVENT_TABLE()
 
-class wxRibbonButtonBarButtonSizeInfo
-{
-public:
-    bool is_supported;
-    wxSize size;
-    wxRect normal_region;
-    wxRect dropdown_region;
-};
-
-class wxRibbonButtonBarButtonInstance
-{
-public:
-    wxPoint position;
-    wxRibbonButtonBarButtonBase* base;
-    wxRibbonButtonBarButtonState size;
-};
-
-class wxRibbonButtonBarButtonBase
-{
-public:
-    wxRibbonButtonBarButtonInstance NewInstance()
-    {
-        wxRibbonButtonBarButtonInstance i;
-        i.base = this;
-        return i;
-    }
-
-    wxRibbonButtonBarButtonState GetLargestSize()
-    {
-        if(sizes[wxRIBBON_BUTTONBAR_BUTTON_LARGE].is_supported)
-            return wxRIBBON_BUTTONBAR_BUTTON_LARGE;
-        if(sizes[wxRIBBON_BUTTONBAR_BUTTON_MEDIUM].is_supported)
-            return wxRIBBON_BUTTONBAR_BUTTON_MEDIUM;
-        wxASSERT(sizes[wxRIBBON_BUTTONBAR_BUTTON_SMALL].is_supported);
-        return wxRIBBON_BUTTONBAR_BUTTON_SMALL;
-    }
-
-    bool GetSmallerSize(
-        wxRibbonButtonBarButtonState* size, int n = 1)
-    {
-        for(; n > 0; --n)
-        {
-            switch(*size)
-            {
-            case wxRIBBON_BUTTONBAR_BUTTON_LARGE:
-                if(sizes[wxRIBBON_BUTTONBAR_BUTTON_MEDIUM].is_supported)
-                {
-                    *size = wxRIBBON_BUTTONBAR_BUTTON_MEDIUM;
-                    break;
-                }
-            case wxRIBBON_BUTTONBAR_BUTTON_MEDIUM:
-                if(sizes[wxRIBBON_BUTTONBAR_BUTTON_SMALL].is_supported)
-                {
-                    *size = wxRIBBON_BUTTONBAR_BUTTON_SMALL;
-                    break;
-                }
-            case wxRIBBON_BUTTONBAR_BUTTON_SMALL:
-            default:
-                return false;
-            }
-        }
-        return true;
-    }
-
-    wxString label;
-    wxString help_string;
-    wxBitmap bitmap_large;
-    wxBitmap bitmap_large_disabled;
-    wxBitmap bitmap_small;
-    wxBitmap bitmap_small_disabled;
-    wxRibbonButtonBarButtonSizeInfo sizes[3];
-    wxObject* client_data;
-    int id;
-    wxRibbonButtonKind kind;
-    long state;
-};
-
 WX_DECLARE_OBJARRAY(wxRibbonButtonBarButtonInstance, wxArrayRibbonButtonBarButtonInstance);
 #include "wx/arrimpl.cpp"
 WX_DEFINE_OBJARRAY(wxArrayRibbonButtonBarButtonInstance)
@@ -278,7 +201,7 @@ wxRibbonButtonBarButtonBase* wxRibbonButtonBar::AddButton(
                 const wxBitmap& bitmap_small_disabled,
                 wxRibbonButtonKind kind,
                 const wxString& help_string,
-                wxObject* client_data)
+                wxClientData* client_data)
 {
     return InsertButton(GetButtonCount(), button_id, label, bitmap,
         bitmap_small, bitmap_disabled,bitmap_small_disabled, kind, help_string,
@@ -295,7 +218,7 @@ wxRibbonButtonBarButtonBase* wxRibbonButtonBar::InsertButton(
                 const wxBitmap& bitmap_small_disabled,
                 wxRibbonButtonKind kind,
                 const wxString& help_string,
-                wxObject* client_data)
+                wxClientData* client_data)
 {
     wxASSERT(bitmap.IsOk() || bitmap_small.IsOk());
     if(m_buttons.IsEmpty())
@@ -357,7 +280,7 @@ wxRibbonButtonBarButtonBase* wxRibbonButtonBar::InsertButton(
     }
     base->kind = kind;
     base->help_string = help_string;
-    base->client_data = client_data;
+    base->client_data.SetClientObject(client_data);
     base->state = 0;
 
     wxClientDC temp_dc(this);
