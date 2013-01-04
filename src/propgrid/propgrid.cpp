@@ -4721,7 +4721,7 @@ bool wxPropertyGrid::HandleMouseClick( int x, unsigned int y, wxMouseEvent &even
     // Need to set focus?
     if ( !(m_iFlags & wxPG_FL_FOCUSED) )
     {
-        SetFocusOnCanvas();
+        SetFocus();
     }
 
     wxPropertyGridPageState* state = m_pState;
