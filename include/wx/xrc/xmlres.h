@@ -140,6 +140,8 @@ public:
     // Add a new handler at the begining of the handler list
     void InsertHandler(wxXmlResourceHandler *handler);
 
+	void RemoveHandler(wxXmlResourceHandler *handler);
+
     // Removes all handlers
     void ClearHandlers();
 
@@ -303,6 +305,8 @@ protected:
     // wxXmlDocument (which will be owned by caller) on success or NULL.
     wxXmlDocument *DoLoadFile(const wxString& file);
 
+	wxXmlDocument *DoLoadStream(const wxString& filename, wxInputStream *stream);
+
     // Scans the resources list for unloaded files and loads them. Also reloads
     // files that have been modified since last loading.
     bool UpdateResources();
@@ -356,6 +360,8 @@ protected:
     // Another helper: detect if the filename is a ZIP or XRS file
     static bool IsArchive(const wxString& filename);
 #endif // wxUSE_FILESYSTEM
+
+	void AddDataRecord(wxString filename, wxXmlDocument* const doc);
 
 private:
     wxXmlResourceDataRecords& Data() { return *m_data; }

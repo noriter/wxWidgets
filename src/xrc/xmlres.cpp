@@ -378,7 +378,7 @@ bool wxXmlResource::Load(const wxString& filemask_)
             if ( !doc )
                 allOK = false;
             else
-                Data().push_back(new wxXmlResourceDataRecord(fnd, doc));
+				AddDataRecord(fnd, doc);
         }
 
         fnd = wxXmlFindNext;
@@ -387,6 +387,11 @@ bool wxXmlResource::Load(const wxString& filemask_)
 #   undef wxXmlFindNext
 
     return allOK;
+}
+
+void wxXmlResource::AddDataRecord(wxString filename, wxXmlDocument* const doc)
+{
+	Data().push_back(new wxXmlResourceDataRecord(filename, doc));
 }
 
 bool wxXmlResource::Unload(const wxString& filename)
@@ -445,7 +450,19 @@ void wxXmlResource::InsertHandler(wxXmlResourceHandler *handler)
     handler->SetParentResource(this);
 }
 
-
+void wxXmlResource::RemoveHandler(wxXmlResourceHandler *handler)
+{
+	for ( wxVector<wxXmlResourceHandler*>::iterator i = m_handlers.begin();
+		i != m_handlers.end(); ++i )
+	{
+		if (*i == handler)
+		{
+			delete *i;
+			m_handlers.erase(i);
+			break;
+		}
+	}
+}
 
 void wxXmlResource::ClearHandlers()
 {
@@ -722,6 +739,11 @@ wxXmlDocument *wxXmlResource::DoLoadFile(const wxString& filename)
     stream = &fstream;
 #endif // wxUSE_FILESYSTEM/!wxUSE_FILESYSTEM
 
+	return DoLoadStream(filename, stream);
+}
+
+wxXmlDocument *wxXmlResource::DoLoadStream(const wxString& filename, wxInputStream *stream)
+{
     if ( !stream || !stream->IsOk() )
     {
         wxLogError(_("Cannot open resources file '%s'."), filename);
