@@ -1,6 +1,6 @@
 *.ncb
 *.user
 *.suo
-/build/msw/vc_*dll
+/build/msw/vc_*
 /lib/vc_dll
 /lib/vc_lib
