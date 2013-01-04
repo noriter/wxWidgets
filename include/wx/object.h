@@ -18,6 +18,7 @@
 // ----------------------------------------------------------------------------
 
 #include "wx/memory.h"
+#include "wx/tracker.h"
 
 #define wxDECLARE_CLASS_INFO_ITERATORS()                                     \
 class WXDLLIMPEXP_BASE const_iterator                                    \
@@ -353,7 +354,7 @@ private:
 // wxObject: the root class of wxWidgets object hierarchy
 // ----------------------------------------------------------------------------
 
-class WXDLLIMPEXP_BASE wxObject
+class WXDLLIMPEXP_BASE wxObject : public wxTrackable
 {
     wxDECLARE_ABSTRACT_CLASS(wxObject);
 

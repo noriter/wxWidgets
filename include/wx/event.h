@@ -3024,7 +3024,6 @@ protected:
 // ----------------------------------------------------------------------------
 
 class WXDLLIMPEXP_BASE wxEvtHandler : public wxObject
-                                    , public wxTrackable
 {
 public:
     wxEvtHandler();
