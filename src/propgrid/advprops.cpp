@@ -1793,6 +1793,20 @@ const wxString& wxPGGetDefaultImageWildcard()
 
         wxList::iterator node;
 
+		str.append("All image files|");
+
+		for ( node = handlers.begin(); node != handlers.end(); ++node )
+		{
+			wxImageHandler *handler = (wxImageHandler*)*node;
+
+			if (node != handlers.begin())
+				str.append(wxT(";"));
+			wxString ext_lo = handler->GetExtension();
+			str.append(wxT("*."));
+			str.append(ext_lo);
+		}
+		str.append( wxT("|") );
+
         // Let's iterate over the image handler list.
         //for ( wxList::Node *node = handlers.GetFirst(); node; node = node->GetNext() )
         for ( node = handlers.begin(); node != handlers.end(); ++node )
