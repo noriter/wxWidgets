@@ -1,0 +1,1 @@
+.objsud/MainFrame.o .objsud/FrameCanvas.o .objsud/wx_pch.o .objsud/MainApp.o .objsud/GUI.o
