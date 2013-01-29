@@ -7,4 +7,4 @@ MACOSX_DEPLOYMENT_TARGET = 10.6
 
 ARCHS = i386 x86_64
 
-OTHER_LDFLAGS = -framework WebKit -framework IOKit -framework Carbon -framework Cocoa -framework AudioToolbox -framework OpenGL -framework QuickTime
+OTHER_LDFLAGS = -framework WebKit -framework IOKit -framework Carbon -framework Cocoa -framework AudioToolbox -framework OpenGL -framework QTKit

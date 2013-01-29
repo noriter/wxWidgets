@@ -1003,6 +1003,12 @@
 		9D4B67A357D23B5283CA8D99 /* clrpickercmn.cpp in Sources */ = {isa = PBXBuildFile; fileRef = AB8A747FB60239B9AB710264 /* clrpickercmn.cpp */; };
 		9E0B67E34B683412978BA82D /* filtall.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4438C284ED5C31EF8CC28FF3 /* filtall.cpp */; };
 		9E0B67E34B683412978BA82E /* filtall.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4438C284ED5C31EF8CC28FF3 /* filtall.cpp */; };
+		9E91462616B7BD6600750DC6 /* textmeasure.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9E91462516B7BD6600750DC6 /* textmeasure.cpp */; };
+		9E91462716B7BD6600750DC6 /* textmeasure.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9E91462516B7BD6600750DC6 /* textmeasure.cpp */; };
+		9E91462916B7BD8900750DC6 /* textmeasurecmn.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9E91462816B7BD8900750DC6 /* textmeasurecmn.cpp */; };
+		9E91462A16B7BD8900750DC6 /* textmeasurecmn.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9E91462816B7BD8900750DC6 /* textmeasurecmn.cpp */; };
+		9E91462C16B7BDAA00750DC6 /* xmlreshandler.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9E91462B16B7BDAA00750DC6 /* xmlreshandler.cpp */; };
+		9E91462D16B7BDAA00750DC6 /* xmlreshandler.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9E91462B16B7BDAA00750DC6 /* xmlreshandler.cpp */; };
 		9EC837DA722736119D49868A /* pngpread.c in Sources */ = {isa = PBXBuildFile; fileRef = 9CAA325362C73AC8BE20FAA7 /* pngpread.c */; };
 		9EC837DA722736119D49868B /* pngpread.c in Sources */ = {isa = PBXBuildFile; fileRef = 9CAA325362C73AC8BE20FAA7 /* pngpread.c */; };
 		9F608A33D52D327FAA295624 /* sckfile.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 56653FACC7D13804A70556AD /* sckfile.cpp */; };
@@ -2138,6 +2144,9 @@
 		9E2C8A7034343354841F7D8B /* toplevel_osx.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = toplevel_osx.cpp; path = ../../src/osx/toplevel_osx.cpp; sourceTree = "<group>"; };
 		9E5C91072D533919A78D8ED2 /* LexTACL.cxx */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = LexTACL.cxx; path = ../../src/stc/scintilla/lexers/LexTACL.cxx; sourceTree = "<group>"; };
 		9E8BF36D3A7C309482CBA9EC /* tipwin.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = tipwin.cpp; path = ../../src/generic/tipwin.cpp; sourceTree = "<group>"; };
+		9E91462516B7BD6600750DC6 /* textmeasure.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = textmeasure.cpp; path = ../../src/generic/textmeasure.cpp; sourceTree = "<group>"; };
+		9E91462816B7BD8900750DC6 /* textmeasurecmn.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = textmeasurecmn.cpp; path = ../../src/common/textmeasurecmn.cpp; sourceTree = "<group>"; };
+		9E91462B16B7BDAA00750DC6 /* xmlreshandler.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = xmlreshandler.cpp; path = ../../src/xrc/xmlreshandler.cpp; sourceTree = "<group>"; };
 		9E9B79C8C7C4302AA057843E /* evtloopunix.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = evtloopunix.cpp; path = ../../src/unix/evtloopunix.cpp; sourceTree = "<group>"; };
 		9EF09C7CC5413CC6A5E7B21B /* LexCPP.cxx */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = LexCPP.cxx; path = ../../src/stc/scintilla/lexers/LexCPP.cxx; sourceTree = "<group>"; };
 		9F16A18CD9C23410B18592FD /* statbox_osx.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = statbox_osx.cpp; path = ../../src/osx/statbox_osx.cpp; sourceTree = "<group>"; };
@@ -2686,6 +2695,7 @@
 				15FCCD1B587637DDA3C1748A /* xh_unkwn.cpp */,
 				EBD381E57BAE3F2AA31A68CB /* xh_wizrd.cpp */,
 				087B66573CD33DA99DA82B1C /* xmlres.cpp */,
+				9E91462B16B7BDAA00750DC6 /* xmlreshandler.cpp */,
 				A1E1A01885B036C28EBDAE27 /* xmladv.cpp */,
 				29922DF1D0D63C33A186E783 /* xmlrsall.cpp */,
 			);
@@ -2917,6 +2927,7 @@
 			isa = PBXGroup;
 			children = (
 				47783A330B2A3B4EBB1CD95D /* fswatcherg.cpp */,
+				9E91462516B7BD6600750DC6 /* textmeasure.cpp */,
 			);
 			name = src/generic;
 			sourceTree = "<group>";
@@ -3447,6 +3458,7 @@
 				C0F7BBD216853E718C9F23D9 /* tarstrm.cpp */,
 				701B84EE7C043B539FF5195A /* textbuf.cpp */,
 				0903EE9B3793303285FF96E3 /* textfile.cpp */,
+				9E91462816B7BD8900750DC6 /* textmeasurecmn.cpp */,
 				5B9586328A1F3C4BA0390AA5 /* time.cpp */,
 				7195E665E0F233839B967FC9 /* timercmn.cpp */,
 				0401B7302088357BB6B7F16F /* timerimpl.cpp */,
@@ -4764,6 +4776,9 @@
 				C2DEE063B5E032C1BD2B5027 /* xmlparse.c in Sources */,
 				AE84BC9A1CCA3ADA9C483951 /* xmlrole.c in Sources */,
 				DB9565CC4EAE3BCB9F490621 /* xmltok.c in Sources */,
+				9E91462716B7BD6600750DC6 /* textmeasure.cpp in Sources */,
+				9E91462A16B7BD8900750DC6 /* textmeasurecmn.cpp in Sources */,
+				9E91462D16B7BDAA00750DC6 /* xmlreshandler.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -5585,6 +5600,9 @@
 				C2DEE063B5E032C1BD2B5026 /* xmlparse.c in Sources */,
 				AE84BC9A1CCA3ADA9C483950 /* xmlrole.c in Sources */,
 				DB9565CC4EAE3BCB9F490620 /* xmltok.c in Sources */,
+				9E91462616B7BD6600750DC6 /* textmeasure.cpp in Sources */,
+				9E91462916B7BD8900750DC6 /* textmeasurecmn.cpp in Sources */,
+				9E91462C16B7BDAA00750DC6 /* xmlreshandler.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

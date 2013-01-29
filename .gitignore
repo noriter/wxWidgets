@@ -7,4 +7,4 @@ project.xcworkspace
 /lib/vc_dll
 /lib/vc_lib
 /build/osx/setup/cocoa/include/wx
-/include/wx/osx
+/include/wx/osx/setup.h
