@@ -3,12 +3,8 @@ WXTOOLKITUPPER = COCOA
 
 #include "wx.xcconfig"
 
-MACOSX_DEPLOYMENT_TARGET = 10.4
-MACOSX_DEPLOYMENT_TARGET[arch=x86_64] = 10.5
+MACOSX_DEPLOYMENT_TARGET = 10.6
 
-GCC_VERSION = 4.2
-GCC_VERSION[arch=ppc] = 4.0
+ARCHS = i386 x86_64
 
-ARCHS = ppc i386 x86_64
-
-OTHER_LDFLAGS = -framework WebKit -framework IOKit -framework Carbon -framework Cocoa -framework AudioToolbox -framework OpenGL -framework QuickTime 
+OTHER_LDFLAGS = -framework WebKit -framework IOKit -framework Carbon -framework Cocoa -framework AudioToolbox -framework OpenGL -framework QuickTime

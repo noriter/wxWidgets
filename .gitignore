@@ -1,6 +1,10 @@
 *.ncb
 *.user
 *.suo
+xcuserdata
+project.xcworkspace
 /build/msw/vc_*
 /lib/vc_dll
 /lib/vc_lib
+/build/osx/setup/cocoa/include/wx
+/include/wx/osx
