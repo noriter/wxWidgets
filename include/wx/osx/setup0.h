@@ -93,7 +93,7 @@
 // Default is 1 if supported by the compiler.
 //
 // Recommended setting: 1, set to 0 if your programs never crash
-#define wxUSE_STACKWALKER 1
+#define wxUSE_STACKWALKER 0
 
 // Set this to 1 to compile in wxDebugReport class which allows you to create
 // and optionally upload to your web site a debug report consisting of back
@@ -103,7 +103,7 @@
 //
 // Recommended setting: 1, it is compiled into a separate library so there
 //                         is no overhead if you don't use it
-#define wxUSE_DEBUGREPORT 1
+#define wxUSE_DEBUGREPORT 0
 
 // Generic comment about debugging settings: they are very useful if you don't
 // use any other memory leak detection tools such as Purify/BoundsChecker, but
