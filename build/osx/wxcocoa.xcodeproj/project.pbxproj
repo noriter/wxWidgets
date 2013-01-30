@@ -1011,6 +1011,14 @@
 		9E91462D16B7BDAA00750DC6 /* xmlreshandler.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9E91462B16B7BDAA00750DC6 /* xmlreshandler.cpp */; };
 		9EC837DA722736119D49868A /* pngpread.c in Sources */ = {isa = PBXBuildFile; fileRef = 9CAA325362C73AC8BE20FAA7 /* pngpread.c */; };
 		9EC837DA722736119D49868B /* pngpread.c in Sources */ = {isa = PBXBuildFile; fileRef = 9CAA325362C73AC8BE20FAA7 /* pngpread.c */; };
+		9ECA66C616B961A900606A51 /* webview_webkit.mm in Sources */ = {isa = PBXBuildFile; fileRef = 9ECA66C516B961A900606A51 /* webview_webkit.mm */; };
+		9ECA66C716B961A900606A51 /* webview_webkit.mm in Sources */ = {isa = PBXBuildFile; fileRef = 9ECA66C516B961A900606A51 /* webview_webkit.mm */; };
+		9ECA66CC16B961FA00606A51 /* webviewfshandler.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9ECA66C916B961FA00606A51 /* webviewfshandler.cpp */; };
+		9ECA66CD16B961FA00606A51 /* webviewfshandler.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9ECA66C916B961FA00606A51 /* webviewfshandler.cpp */; };
+		9ECA66CE16B961FA00606A51 /* webview.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9ECA66CA16B961FA00606A51 /* webview.cpp */; };
+		9ECA66CF16B961FA00606A51 /* webview.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9ECA66CA16B961FA00606A51 /* webview.cpp */; };
+		9ECA66D016B961FA00606A51 /* webviewarchivehandler.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9ECA66CB16B961FA00606A51 /* webviewarchivehandler.cpp */; };
+		9ECA66D116B961FA00606A51 /* webviewarchivehandler.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9ECA66CB16B961FA00606A51 /* webviewarchivehandler.cpp */; };
 		9F608A33D52D327FAA295624 /* sckfile.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 56653FACC7D13804A70556AD /* sckfile.cpp */; };
 		9F608A33D52D327FAA295625 /* sckfile.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 56653FACC7D13804A70556AD /* sckfile.cpp */; };
 		9F70A89D00B03D4894AF7638 /* validate.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 01BA6D45FE4C381493EB4372 /* validate.cpp */; };
@@ -2148,6 +2156,12 @@
 		9E91462816B7BD8900750DC6 /* textmeasurecmn.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = textmeasurecmn.cpp; path = ../../src/common/textmeasurecmn.cpp; sourceTree = "<group>"; };
 		9E91462B16B7BDAA00750DC6 /* xmlreshandler.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = xmlreshandler.cpp; path = ../../src/xrc/xmlreshandler.cpp; sourceTree = "<group>"; };
 		9E9B79C8C7C4302AA057843E /* evtloopunix.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = evtloopunix.cpp; path = ../../src/unix/evtloopunix.cpp; sourceTree = "<group>"; };
+		9ECA66C516B961A900606A51 /* webview_webkit.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = webview_webkit.mm; path = ../../src/osx/webview_webkit.mm; sourceTree = "<group>"; };
+		9ECA66C916B961FA00606A51 /* webviewfshandler.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = webviewfshandler.cpp; path = ../../src/common/webviewfshandler.cpp; sourceTree = "<group>"; };
+		9ECA66CA16B961FA00606A51 /* webview.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = webview.cpp; path = ../../src/common/webview.cpp; sourceTree = "<group>"; };
+		9ECA66CB16B961FA00606A51 /* webviewarchivehandler.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = webviewarchivehandler.cpp; path = ../../src/common/webviewarchivehandler.cpp; sourceTree = "<group>"; };
+		9ECA66D216B9638A00606A51 /* wx.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = wx.xcconfig; sourceTree = "<group>"; };
+		9ECA66D316B9639700606A51 /* wxvers.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = wxvers.xcconfig; sourceTree = "<group>"; };
 		9EF09C7CC5413CC6A5E7B21B /* LexCPP.cxx */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = LexCPP.cxx; path = ../../src/stc/scintilla/lexers/LexCPP.cxx; sourceTree = "<group>"; };
 		9F16A18CD9C23410B18592FD /* statbox_osx.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = statbox_osx.cpp; path = ../../src/osx/statbox_osx.cpp; sourceTree = "<group>"; };
 		9F838F853CB03CF7932C08C3 /* choice.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = choice.mm; path = ../../src/osx/cocoa/choice.mm; sourceTree = "<group>"; };
@@ -2538,6 +2552,8 @@
 		1D56230B75893DBA8A923441 /* wxcocoa */ = {
 			isa = PBXGroup;
 			children = (
+				9ECA66D216B9638A00606A51 /* wx.xcconfig */,
+				9ECA66D316B9639700606A51 /* wxvers.xcconfig */,
 				7DEBE1EB2B94305E8E8D6EA5 /* wxcocoa.xcconfig */,
 				8707324525DB344EA0E7D5CE /* wxdebug.xcconfig */,
 				D5B7B7C10A3E3C689AE1E418 /* wxrelease.xcconfig */,
@@ -3611,6 +3627,9 @@
 				01BA6D45FE4C381493EB4372 /* validate.cpp */,
 				DE8701E1CF2B352B945C17E5 /* valtext.cpp */,
 				684D92E552BE313CBE0A88AA /* valnum.cpp */,
+				9ECA66C916B961FA00606A51 /* webviewfshandler.cpp */,
+				9ECA66CA16B961FA00606A51 /* webview.cpp */,
+				9ECA66CB16B961FA00606A51 /* webviewarchivehandler.cpp */,
 				AC5C60B3AF893BE98BCE6C1D /* wincmn.cpp */,
 				E9B9B85572D0312BBF2878DB /* windowid.cpp */,
 				B5E2D6917EB1352983C7FE85 /* wrapsizer.cpp */,
@@ -3737,6 +3756,7 @@
 				1B7308D9C4BA39F19223C82C /* tglbtn_osx.cpp */,
 				6CD29E47B69D3F3482665E77 /* toolbar_osx.cpp */,
 				8C78A1539462370CAA429508 /* accel.cpp */,
+				9ECA66C516B961A900606A51 /* webview_webkit.mm */,
 			);
 			name = src/osx;
 			sourceTree = "<group>";
@@ -4779,6 +4799,10 @@
 				9E91462716B7BD6600750DC6 /* textmeasure.cpp in Sources */,
 				9E91462A16B7BD8900750DC6 /* textmeasurecmn.cpp in Sources */,
 				9E91462D16B7BDAA00750DC6 /* xmlreshandler.cpp in Sources */,
+				9ECA66C716B961A900606A51 /* webview_webkit.mm in Sources */,
+				9ECA66CD16B961FA00606A51 /* webviewfshandler.cpp in Sources */,
+				9ECA66CF16B961FA00606A51 /* webview.cpp in Sources */,
+				9ECA66D116B961FA00606A51 /* webviewarchivehandler.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -5603,6 +5627,10 @@
 				9E91462616B7BD6600750DC6 /* textmeasure.cpp in Sources */,
 				9E91462916B7BD8900750DC6 /* textmeasurecmn.cpp in Sources */,
 				9E91462C16B7BDAA00750DC6 /* xmlreshandler.cpp in Sources */,
+				9ECA66C616B961A900606A51 /* webview_webkit.mm in Sources */,
+				9ECA66CC16B961FA00606A51 /* webviewfshandler.cpp in Sources */,
+				9ECA66CE16B961FA00606A51 /* webview.cpp in Sources */,
+				9ECA66D016B961FA00606A51 /* webviewarchivehandler.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
