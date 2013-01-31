@@ -3,6 +3,7 @@
 *.suo
 xcuserdata
 project.xcworkspace
+DerivedData
 /build/msw/vc_*
 /lib/vc_dll
 /lib/vc_lib
